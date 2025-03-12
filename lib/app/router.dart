@@ -61,7 +61,7 @@ class RoleBasedLayout extends ConsumerWidget {
       case 'manager':
         return const ManagerHome();
       case 'distributor':
-        return const DistributorHome();
+        return const DistributorHomePage();
       default:
         return const LoginPage();
     }
