@@ -6,7 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/role_provider.dart';
 import '../features/auth/presentation/distributor_home_page.dart';
 import '../features/auth/presentation/manager_home_page.dart';
-import '../features/auth/presentation/owner_home_page.dart';
+import '../features/auth/presentation/owner/owner_home_page.dart';
 
 final router = GoRouter(
   redirect: (context, state) {
@@ -57,7 +57,7 @@ class RoleBasedLayout extends ConsumerWidget {
   Widget _buildRoleLayout(String role) {
     switch (role) {
       case 'owner':
-        return const OwnerHome();
+        return const OwnerHomePage();
       case 'manager':
         return const ManagerHome();
       case 'distributor':

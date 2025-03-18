@@ -76,8 +76,6 @@ Future<void> _handleSignUp() async {
         backgroundColor: AppColors.error,
       ),
     );
-    //print(message);
-      print(message);
   }
 
   @override

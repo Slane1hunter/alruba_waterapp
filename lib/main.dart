@@ -6,7 +6,7 @@ import 'constants/app_text_styles.dart';
 import 'features/auth/presentation/distributor_home_page.dart';
 import 'features/auth/presentation/login_page.dart';
 import 'features/auth/presentation/manager_home_page.dart';
-import 'features/auth/presentation/owner_home_page.dart';
+import 'features/auth/presentation/owner/owner_home_page.dart';
 import 'features/auth/presentation/signup_page.dart';
 import 'providers/auth_provider.dart';
 import 'providers/role_provider.dart';
@@ -14,10 +14,11 @@ import 'services/supabase_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   await SupabaseService.initialize(
     url: 'https://iqjknqbjrbouicdanjjm.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxamtucWJqcmJvdWljZGFuamptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExOTg1MDAsImV4cCI6MjA1Njc3NDUwMH0.6aOm7o3FKypk72T6hXACsi0odzDsF9I-FLpo9krmDIM',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxamtucWJqcmJvdWljZGFuamptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExOTg1MDAsImV4cCI6MjA1Njc3NDUwMH0.6aOm7o3FKypk72T6hXACsi0odzDsF9I-FLpo9krmDIM',
   );
 
   runApp(const ProviderScope(child: MyApp()));
@@ -29,7 +30,7 @@ class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
-    
+
     return MaterialApp.router(
       title: 'Water Distribution',
       theme: ThemeData(
@@ -53,7 +54,7 @@ class MyApp extends ConsumerWidget {
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
-  
+
   return GoRouter(
     debugLogDiagnostics: true,
     redirect: (context, state) {
@@ -63,7 +64,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!isAuthenticated && path != '/login' && path != '/signup') {
         return '/login';
       }
-      
+
       if (isAuthenticated && (path == '/login' || path == '/signup')) {
         return '/';
       }
@@ -97,16 +98,17 @@ final routerProvider = Provider<GoRouter>((ref) {
 
 class RoleBasedWrapper extends ConsumerWidget {
   final Widget child;
-  
+
   const RoleBasedWrapper({super.key, required this.child});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final roleAsync = ref.watch(roleProvider);
-    
+
     return roleAsync.when(
       data: (role) => _buildLayout(role),
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (error, stack) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           ref.read(authProvider.notifier).signOut();
@@ -120,7 +122,7 @@ class RoleBasedWrapper extends ConsumerWidget {
   Widget _buildLayout(String role) {
     switch (role) {
       case 'owner':
-        return const OwnerHome();
+        return const OwnerHomePage();
       case 'manager':
         return const ManagerHome();
       case 'distributor':

@@ -30,8 +30,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_typeahead: ^5.2.0
   supabase_flutter: ^2.8.4
   geolocator: ^13.0.2
+  geocoding: ^3.0.0
   google_maps_flutter: ^2.10.1
   hive: ^2.2.3  
   hive_flutter: ^1.1.0
@@ -40,8 +42,7 @@ dependencies:
   go_router: ^14.8.1
   flutter_secure_storage: ^9.2.4
   jwt_decoder: ^2.0.1
-
-
+  url_launcher: ^6.3.1
 
 
 dev_dependencies:
