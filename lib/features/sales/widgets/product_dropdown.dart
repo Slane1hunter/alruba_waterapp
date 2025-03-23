@@ -1,9 +1,10 @@
+import 'package:alruba_waterapp/models/product.dart';
 import 'package:flutter/material.dart';
 
 class ProductDropdown extends StatelessWidget {
-  final String? selectedProduct;
-  final ValueChanged<String?> onProductChanged;
-  final List<Map<String, String>> products;
+  final Product? selectedProduct;               // or just selectedProductId
+  final ValueChanged<Product?> onProductChanged;
+  final List<Product> products;
 
   const ProductDropdown({
     super.key,
@@ -14,16 +15,16 @@ class ProductDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
+    return DropdownButtonFormField<Product>(
       decoration: const InputDecoration(
         labelText: 'Select Product',
         border: OutlineInputBorder(),
       ),
       value: selectedProduct,
       items: products.map((p) {
-        return DropdownMenuItem<String>(
-          value: p['id'],
-          child: Text(p['name']!),
+        return DropdownMenuItem<Product>(
+          value: p,
+          child: Text(p.name),
         );
       }).toList(),
       onChanged: onProductChanged,

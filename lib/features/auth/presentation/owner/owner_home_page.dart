@@ -17,47 +17,47 @@ class _OwnerHomePageState extends ConsumerState<OwnerHomePage> {
   final List<Widget> _pages = const [
     ProductListPage(),
     LocationListPage(),
-    
   ];
 
-    @override
+  @override
   void initState() {
     super.initState();
     _fetchData();
     testAccess();
-     // Fetch data on page initialization
+    // Fetch data on page initialization
   }
 
- Future<void> _fetchData() async {
-  try {
-    final productsResponse =
-        await SupabaseService.client.from('products').select('*');
-    debugPrint('Products response: $productsResponse');
+  Future<void> _fetchData() async {
+    try {
+      final productsResponse =
+          await SupabaseService.client.from('products').select('*');
+      debugPrint('Products response: $productsResponse');
 
-    final locationsResponse =
-        await SupabaseService.client.from('locations').select('*');
-    debugPrint('Locations response: $locationsResponse');
-  } catch (e) {
-    debugPrint('Error fetching products or locations: ${e.toString()}');
-  }
-}
-
-
-Future<void> testAccess() async {
-  try {
-    final productsResponse = await SupabaseService.client.from('products').select('*');
-    debugPrint('Products response: $productsResponse');
-  } catch (e) {
-    debugPrint('Error fetching products: $e');
+      final locationsResponse =
+          await SupabaseService.client.from('locations').select('*');
+      debugPrint('Locations response: $locationsResponse');
+    } catch (e) {
+      debugPrint('Error fetching products or locations: ${e.toString()}');
+    }
   }
 
-  try {
-    final locationsResponse = await SupabaseService.client.from('locations').select('*');
-    debugPrint('Locations response: $locationsResponse');
-  } catch (e) {
-    debugPrint('Error fetching locations: $e');
+  Future<void> testAccess() async {
+    try {
+      final productsResponse =
+          await SupabaseService.client.from('products').select('*');
+      debugPrint('Products response: $productsResponse');
+    } catch (e) {
+      debugPrint('Error fetching products: $e');
+    }
+
+    try {
+      final locationsResponse =
+          await SupabaseService.client.from('locations').select('*');
+      debugPrint('Locations response: $locationsResponse');
+    } catch (e) {
+      debugPrint('Error fetching locations: $e');
+    }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -72,14 +72,18 @@ Future<void> testAccess() async {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        selectedItemColor: Theme.of(context).colorScheme.primary,
+        unselectedItemColor: Colors.grey,
+        type: BottomNavigationBarType.fixed,
         onTap: (newIndex) => setState(() => _currentIndex = newIndex),
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.production_quantity_limits),
+            icon: Icon(Icons.inventory_2),
             label: 'Products',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.location_on),
+            icon: Icon(Icons.map),
             label: 'Locations',
           ),
         ],

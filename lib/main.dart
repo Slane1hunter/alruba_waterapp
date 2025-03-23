@@ -1,6 +1,16 @@
+import 'package:alruba_waterapp/models/offline_sale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+// For Hive
+import 'package:hive_flutter/hive_flutter.dart';
+
+// Import your generated adapters if you haven't already
+// e.g. 'sale.dart' and 'customer.dart' – assuming these models exist with Hive annotations
+// import 'package:alruba_waterapp/models/sale.dart';
+// import 'package:alruba_waterapp/models/customer.dart';
+
 import 'constants/app_colors.dart';
 import 'constants/app_text_styles.dart';
 import 'features/auth/presentation/distributor_home_page.dart';
@@ -15,12 +25,22 @@ import 'services/supabase_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 1) Initialize Hive
+  await Hive.initFlutter();
+
+  // 2) Register your Hive adapters
+  // Example:
+  // Hive.registerAdapter(SaleAdapter()); 
+  // Hive.registerAdapter(CustomerAdapter());
+    Hive.registerAdapter(OfflineSaleAdapter());
+
+
+  // 3) Initialize Supabase
   await SupabaseService.initialize(
     url: 'https://iqjknqbjrbouicdanjjm.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxamtucWJqcmJvdWljZGFuamptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExOTg1MDAsImV4cCI6MjA1Njc3NDUwMH0.6aOm7o3FKypk72T6hXACsi0odzDsF9I-FLpo9krmDIM',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   );
-
+  // 4) Run app with ProviderScope
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -59,16 +79,14 @@ final routerProvider = Provider<GoRouter>((ref) {
     debugLogDiagnostics: true,
     redirect: (context, state) {
       final isAuthenticated = authState.valueOrNull != null;
-      final path = state.uri.path; // Changed from location to uri.path
+      final path = state.uri.path;
 
       if (!isAuthenticated && path != '/login' && path != '/signup') {
         return '/login';
       }
-
       if (isAuthenticated && (path == '/login' || path == '/signup')) {
         return '/';
       }
-
       return null;
     },
     routes: [
@@ -98,7 +116,6 @@ final routerProvider = Provider<GoRouter>((ref) {
 
 class RoleBasedWrapper extends ConsumerWidget {
   final Widget child;
-
   const RoleBasedWrapper({super.key, required this.child});
 
   @override

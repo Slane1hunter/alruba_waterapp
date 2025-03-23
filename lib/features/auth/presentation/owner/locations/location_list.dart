@@ -1,51 +1,65 @@
-import 'package:alruba_waterapp/services/supabase_service.dart';
+import 'package:alruba_waterapp/providers/location_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'add_location_page.dart';
+import 'edit_location_page.dart';
+ // We'll create this
 
 class LocationListPage extends ConsumerWidget {
   const LocationListPage({super.key});
 
-  Future<List<dynamic>> fetchLocations() async {
-    // Query locations from Supabase.
-    final data = await SupabaseService.client.from('locations').select('*');
-    return data as List<dynamic>;
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return FutureBuilder<List<dynamic>>(
-      future: fetchLocations(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        } else if (snapshot.hasError) {
-          debugPrint('Error fetching locations: ${snapshot.error}');
-          return Center(child: Text('Error: ${snapshot.error}'));
-        } else if (snapshot.hasData) {
-          final locations = snapshot.data!;
-          return Scaffold(
-            body: ListView.builder(
-              itemCount: locations.length,
-              itemBuilder: (context, index) {
-                final location = locations[index];
-                return ListTile(
-                  title: Text(location['name'].toString()),
-                );
-              },
-            ),
-            floatingActionButton: FloatingActionButton(
-              onPressed: () {
-                // Navigate to add/edit location page (to be implemented)
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Add Location pressed')),
-                );
-              },
-              child: const Icon(Icons.add),
-            ),
+    final locationsAsync = ref.watch(locationsProvider);
+
+    return Scaffold(
+      body: locationsAsync.when(
+        data: (locations) {
+          if (locations.isEmpty) {
+            return const Center(child: Text('No locations found.'));
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: locations.length,
+            itemBuilder: (context, index) {
+              final location = locations[index];
+              return Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                margin: const EdgeInsets.only(bottom: 16),
+                child: ListTile(
+                  title: Text(location.name),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => EditLocationPage(location: location),
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
           );
-        }
-        return const Center(child: Text('No locations found'));
-      },
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stack) =>
+            Center(child: Text('Error: ${error.toString()}')),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            builder: (_) => const AddLocationPage(),
+          );
+        },
+        child: const Icon(Icons.add),
+      ),
     );
   }
 }

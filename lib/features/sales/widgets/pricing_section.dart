@@ -17,9 +17,15 @@ class PricingSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Pricing',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        const Row(
+          children: [
+            Icon(Icons.price_change_outlined, size: 20),
+            SizedBox(width: 8),
+            Text(
+              'Pricing',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         TextFormField(
@@ -41,24 +47,30 @@ class PricingSection extends StatelessWidget {
           },
         ),
         const SizedBox(height: 16),
-        TextFormField(
-          controller: quantityController,
-          decoration: const InputDecoration(
-            labelText: 'Quantity (gallons)',
-            hintText: 'Enter quantity',
-            border: OutlineInputBorder(),
-          ),
-          keyboardType: TextInputType.number,
-          validator: (val) {
-            if (val == null || val.isEmpty) {
-              return 'Please enter a quantity';
-            }
-            if (int.tryParse(val) == null || int.parse(val) <= 0) {
-              return 'Enter a valid quantity';
-            }
-            return null;
-          },
-        ),
+       TextFormField(
+  controller: quantityController,
+  decoration: const InputDecoration(
+    labelText: 'Quantity (gallons)',
+    hintText: 'Enter quantity',
+    border: OutlineInputBorder(),
+  ),
+  keyboardType: TextInputType.number,
+  onTap: () {
+    if (quantityController.text == '0') {
+      quantityController.clear();
+    }
+  },
+  validator: (val) {
+    if (val == null || val.isEmpty) {
+      return 'Please enter a quantity';
+    }
+    if (int.tryParse(val) == null || int.parse(val) <= 0) {
+      return 'Enter a valid quantity';
+    }
+    return null;
+  },
+)
+,
         const SizedBox(height: 16),
         Text(
           'Total Price: \$${totalPrice.toStringAsFixed(2)}',

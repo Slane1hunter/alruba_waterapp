@@ -3,12 +3,14 @@ class Product {
   final String name;
   final double homePrice;
   final double marketPrice;
+  final double productionCost; // add this
 
   Product({
     required this.id,
     required this.name,
     required this.homePrice,
     required this.marketPrice,
+    required this.productionCost,
   });
 
   factory Product.fromMap(Map<String, dynamic> map) {
@@ -17,6 +19,7 @@ class Product {
       name: map['name'] as String,
       homePrice: (map['home_price'] as num).toDouble(),
       marketPrice: (map['market_price'] as num).toDouble(),
+      productionCost: (map['production_cost'] as num).toDouble(), // parse it
     );
   }
 }
