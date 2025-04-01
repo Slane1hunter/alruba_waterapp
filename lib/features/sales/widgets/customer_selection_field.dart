@@ -16,7 +16,6 @@ class CustomerSelectionField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // For simplicity, using a DropdownButtonFormField instead of Autocomplete.
     return DropdownButtonFormField<String>(
       decoration: const InputDecoration(
         labelText: 'Select Existing Customer',
@@ -25,7 +24,8 @@ class CustomerSelectionField extends StatelessWidget {
       value: selectedCustomer,
       items: customers.map((customer) {
         return DropdownMenuItem<String>(
-          value: customer['id'],
+          // Convert the id to a string
+          value: customer['id'].toString(),
           child: Text(customer['name']!),
         );
       }).toList(),

@@ -1,9 +1,9 @@
+import 'package:alruba_waterapp/models/customer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-// Offline logic
-import 'package:hive_flutter/hive_flutter.dart' show Hive; // If you need Hive references
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../models/offline_sale.dart';
 import '../../services/offline_sales_queue.dart';
 
@@ -12,7 +12,7 @@ import 'package:alruba_waterapp/providers/customers_provider.dart';
 import 'package:alruba_waterapp/providers/products_provider.dart';
 import 'package:alruba_waterapp/providers/location_provider.dart';
 
-// Your custom widgets
+// Custom widgets
 import 'widgets/customer_selection_field.dart';
 import 'widgets/customer_location_field.dart';
 import 'widgets/product_dropdown.dart';
@@ -20,7 +20,6 @@ import 'widgets/pricing_section.dart';
 import 'widgets/payment_section.dart';
 import 'widgets/sale_form_submit_button.dart';
 
-// If your Product model has marketPrice and homePrice
 import 'package:alruba_waterapp/models/product.dart';
 
 class MakeSalePage extends ConsumerStatefulWidget {
@@ -40,10 +39,12 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
   String? _existingCustomerId;
   String? _existingCustomerName;
   String? _existingCustomerPhone;
-  String? _newCustomerName;      // If new user, name typed
+  String? _newCustomerName; // If new, name typed
   String? _newCustomerPhone;
-  String? _newCustomerType;      // 'distributor' or 'regular'
-  String? _newCustomerLocation;  // location ID from dropdown
+  String? _newCustomerType; // 'distributor' or 'regular'
+  String? _newCustomerLocation; // location ID from dropdown
+  // Declare _preciseLocation so it can be updated (e.g. by your ExactLocationWidget)
+  String? _preciseLocation;
 
   final List<String> _placeholderTypes = ['distributor', 'regular'];
 
@@ -96,68 +97,99 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
 
   /// Auto-fill price based on user type & product
   void _autoFillPrice() {
-  if (_selectedProduct == null) return;
-  bool isDistributor = false;
-  if (_isNewCustomer) {
-    if (_newCustomerType == 'distributor' || _newCustomerType == 'market') {
-      isDistributor = true;
+    if (_selectedProduct == null) return;
+    bool isDistributor = false;
+    if (_isNewCustomer) {
+      if (_newCustomerType == 'distributor' || _newCustomerType == 'market') {
+        isDistributor = true;
+      }
+    } else {
+      // For existing customers, assume 'regular' for demonstration.
+      isDistributor = false;
     }
-  } else {
-    // For existing customers, if you have a type stored (you might add that in your mapping), use it:
-    // For demonstration, assume 'regular' unless specified.
-    isDistributor = false;
+
+    final price = isDistributor
+        ? _selectedProduct!.marketPrice
+        : _selectedProduct!.homePrice;
+
+    _priceController.text = price.toStringAsFixed(2);
+    _updateTotalPrice();
   }
 
-  final price = isDistributor
-      ? _selectedProduct!.marketPrice
-      : _selectedProduct!.homePrice;
-
-  _priceController.text = price.toStringAsFixed(2);
-  _updateTotalPrice();
-}
   String _defaultLocationId() {
     // Replace with an actual valid location id from your locations table.
     return '17c1cb39-7b97-494b-be85-bae7290cd54c';
   }
 
-  /// Save sale offline with product/customer name
-  Future<void> _submitFormOffline() async {
-    if (!_formKey.currentState!.validate()) return;
-    _formKey.currentState!.save();
+  /// Save sale offline with product/customer details.
+Future<void> _submitFormOffline() async {
+  if (!_formKey.currentState!.validate()) return;
+  _formKey.currentState!.save();
+
+  String? customerId;
+  // For new customers, add their info to the offline customer box.
+  if (_isNewCustomer) {
+    // Create a new Customer object (ensure your Customer model has these fields)
+    final newLocalCustomer = Customer(
+      name: _newCustomerName ?? "Unknown Customer",
+      phone: _newCustomerPhone ?? "",
+      type: _newCustomerType ?? "regular",
+      locationId: _newCustomerLocation ?? _defaultLocationId(),
+      preciseLocation: _preciseLocation,
+    );
+
+    // Insert the new customer into the offline customers box.
+    final customerBox = await Hive.openBox<Customer>('offline_customers');
+    await customerBox.add(newLocalCustomer);
+
+    // Leave customerId null so that during sync, the service will
+    // lookup by phone and insert the new customer remotely.
+    customerId = null;
+  } else {
+    // For existing customers, use their existing ID.
+    customerId = _existingCustomerId;
+  }
 
   final phoneToStore = _isNewCustomer ? _newCustomerPhone : _existingCustomerPhone;
-final saleCustomerName = _isNewCustomer ? _newCustomerName : _existingCustomerName;
+  final saleCustomerName = _isNewCustomer ? _newCustomerName : _existingCustomerName;
+  final qty = int.tryParse(_quantityController.text) ?? 0;
+  final price = double.tryParse(_priceController.text) ?? 0.0;
 
-    // 2) Build offline sale
-    final offlineSale = OfflineSale(
-  isNewCustomer: _isNewCustomer,
-  newCustomerPhone: _isNewCustomer ? _newCustomerPhone : null,
-  existingCustomerId: !_isNewCustomer ? _existingCustomerId : null,
-  customerName: saleCustomerName,
-  customerPhone: phoneToStore,
-  productId: _selectedProduct?.id,
-  productName: _selectedProduct?.name,
-  pricePerUnit: double.tryParse(_priceController.text) ?? 0.0,
-  quantity: int.tryParse(_quantityController.text) ?? 0,
-  totalPrice: _totalPrice,
-  paymentStatus: _paymentStatus,
-  notes: _paymentStatus == 'Unpaid' && _notesController.text.isNotEmpty
-      ? _notesController.text
-      : null,
-  createdAt: DateTime.now(),
-   soldBy: Supabase.instance.client.auth.currentUser?.id ?? 'unknown', // Provide the current user's id or a default value.
-  locationId: _newCustomerLocation ?? _defaultLocationId(), // Use the new customer location if set, otherwise a default location.
-  
-);
+  // Build the OfflineSale record.
+  final offlineSale = OfflineSale(
+    isNewCustomer: _isNewCustomer,
+    newCustomerPhone: _isNewCustomer ? _newCustomerPhone : null,
+    existingCustomerId: customerId,
+    customerName: saleCustomerName,
+    customerPhone: phoneToStore,
+    productId: _selectedProduct?.id,
+    productName: _selectedProduct?.name,
+    pricePerUnit: price,
+    quantity: qty,
+    totalPrice: _totalPrice,
+    paymentStatus: _paymentStatus,
+    notes: _paymentStatus == 'Unpaid' && _notesController.text.isNotEmpty ? _notesController.text : null,
+    createdAt: DateTime.now(),
+    soldBy: Supabase.instance.client.auth.currentUser?.id ?? 'unknown',
+    locationId: _newCustomerLocation ?? _defaultLocationId(),
+    preciseLocation: _preciseLocation,
+  );
 
-    // 3) Add to local queue
-    await OfflineSalesQueue.addSale(offlineSale);
+  debugPrint("[MakeSalePage] OfflineSale: $offlineSale");
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sale stored offline in queue!')),
-    );
-  }
+  // Add the sale to the Hive offline queue.
+  await OfflineSalesQueue.addSale(offlineSale);
+
+  // Verify that the sale has been added.
+  final queuedSales = await OfflineSalesQueue.getAllSales();
+  debugPrint("[MakeSalePage] Total unsynced sales in queue: ${queuedSales.length}");
+
+  if (!mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Sale queued for sync!'))
+  );
+}
+
 
   // ----------------------------
   // UI
@@ -165,8 +197,6 @@ final saleCustomerName = _isNewCustomer ? _newCustomerName : _existingCustomerNa
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    // watch the providers
     final customersAsync = ref.watch(customersProvider);
     final productsAsync = ref.watch(productsProvider);
     final locationsAsync = ref.watch(locationsProvider);
@@ -182,7 +212,7 @@ final saleCustomerName = _isNewCustomer ? _newCustomerName : _existingCustomerNa
           key: _formKey,
           child: Column(
             children: [
-              // 1) Customer Card
+              // Customer Card
               Card(
                 elevation: 3,
                 shape: RoundedRectangleBorder(
@@ -194,7 +224,7 @@ final saleCustomerName = _isNewCustomer ? _newCustomerName : _existingCustomerNa
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Switch new/existing
+                      // Switch between new/existing customer
                       Row(
                         children: [
                           const Icon(Icons.person_outline, size: 20),
@@ -218,49 +248,47 @@ final saleCustomerName = _isNewCustomer ? _newCustomerName : _existingCustomerNa
                                 _newCustomerPhone = null;
                                 _newCustomerType = null;
                                 _newCustomerLocation = null;
+                                _preciseLocation = null;
                               });
                             },
                           ),
                         ],
                       ),
                       const SizedBox(height: 16),
-
-                      // If not new => existing selection
+                      // Existing Customer selection
                       if (!_isNewCustomer)
                         customersAsync.when(
-                          loading: () => const Center(
-                            child: CircularProgressIndicator(),
-                          ),
+                          loading: () =>
+                              const Center(child: CircularProgressIndicator()),
                           error: (err, st) => Text('Error: $err'),
                           data: (customerList) {
                             final mapped = customerList.map((c) {
-  return {
-    'id': c['id'].toString(),
-    'name': c['name'].toString(),
-    'phone': c['phone'].toString(), // include phone
-  };
-}).toList();
-return CustomerSelectionField(
-  isNewCustomer: _isNewCustomer,
-  selectedCustomer: _existingCustomerId,
-  onCustomerChanged: (val) {
-    setState(() {
-      _existingCustomerId = val;
-      // Find the selected customer's details:
-      final found = mapped.firstWhere(
-        (x) => x['id'] == val,
-        orElse: () => {'name': 'Unknown', 'phone': 'N/A'},
-      );
-      _existingCustomerName = found['name'];
-      _existingCustomerPhone = found['phone'];
-    });
-  },
-  customers: mapped,
-);
+                              return {
+                                'id': c['id'].toString(),
+                                'name': c['name'].toString(),
+                                'phone': c['phone'].toString(),
+                              };
+                            }).toList();
+                            return CustomerSelectionField(
+                              isNewCustomer: _isNewCustomer,
+                              selectedCustomer: _existingCustomerId,
+                              onCustomerChanged: (val) {
+                                setState(() {
+                                  _existingCustomerId = val;
+                                  final found = mapped.firstWhere(
+                                    (x) => x['id'] == val,
+                                    orElse: () =>
+                                        {'name': 'Unknown', 'phone': 'N/A'},
+                                  );
+                                  _existingCustomerName = found['name'];
+                                  _existingCustomerPhone = found['phone'];
+                                });
+                              },
+                              customers: mapped,
+                            );
                           },
                         ),
-
-                      // If new => name, phone, type
+                      // New Customer fields
                       if (_isNewCustomer) ...[
                         TextFormField(
                           decoration: const InputDecoration(
@@ -306,20 +334,24 @@ return CustomerSelectionField(
                         ),
                         const SizedBox(height: 16),
                         locationsAsync.when(
-                          loading: () => const Center(
-                            child: CircularProgressIndicator(),
-                          ),
+                          loading: () =>
+                              const Center(child: CircularProgressIndicator()),
                           error: (err, st) => Text('Error: $err'),
                           data: (locList) {
-                            final mappedLocs = locList.map((loc) => {
-                                  'id': loc.id.toString(),
-                                  'name': loc.name.toString(),
-                                }).toList();
+                            // Assume locList returns objects with id and name properties.
+                            final mappedLocs = locList.map((loc) {
+                              return {
+                                'id': loc
+                                    .id, // Using as-is, assuming it's a String.
+                                'name': loc.name.toString(),
+                              };
+                            }).toList();
                             return CustomerLocationDropdown(
                               selectedLocation: _newCustomerLocation,
                               onLocationChanged: (val) =>
                                   setState(() => _newCustomerLocation = val),
-                              locations: mappedLocs,
+                              locations:
+                                  List<Map<String, String>>.from(mappedLocs),
                             );
                           },
                         ),
@@ -330,8 +362,7 @@ return CustomerSelectionField(
                   ),
                 ),
               ),
-
-              // 2) Product & Pricing
+              // Product & Pricing Card
               Card(
                 elevation: 3,
                 shape: RoundedRectangleBorder(
@@ -358,8 +389,7 @@ return CustomerSelectionField(
                       const SizedBox(height: 16),
                       ref.watch(productsProvider).when(
                             loading: () => const Center(
-                              child: CircularProgressIndicator(),
-                            ),
+                                child: CircularProgressIndicator()),
                             error: (err, st) => Text('Product Error: $err'),
                             data: (prodList) {
                               final typed = prodList as List<Product>;
@@ -390,8 +420,7 @@ return CustomerSelectionField(
                   ),
                 ),
               ),
-
-              // 3) Payment
+              // Payment Card
               Card(
                 elevation: 3,
                 shape: RoundedRectangleBorder(
@@ -439,8 +468,7 @@ return CustomerSelectionField(
                   ),
                 ),
               ),
-
-              // 4) Submit => offline
+              // Submit Button
               SaleFormSubmitButton(
                 onPressed: _submitFormOffline,
               ),

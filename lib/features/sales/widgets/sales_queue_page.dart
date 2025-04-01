@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 
 import '../../../models/offline_sale.dart';
+import '../../../providers/customers_provider.dart';
 import '../../../services/offline_sync_service.dart';
 
-class SalesQueuePage extends StatefulWidget {
+class SalesQueuePage extends ConsumerStatefulWidget {
   const SalesQueuePage({super.key});
 
   @override
-  State<SalesQueuePage> createState() => _SalesQueuePageState();
+  ConsumerState<SalesQueuePage> createState() => _SalesQueuePageState();
 }
 
-class _SalesQueuePageState extends State<SalesQueuePage> {
+class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
+  // Now you can use ref
   late Box<OfflineSale> salesBox;
 
   @override
@@ -38,9 +41,11 @@ class _SalesQueuePageState extends State<SalesQueuePage> {
   Future<void> _syncSales() async {
     await OfflineSyncService().syncOfflineData();
     if (!mounted) return;
+    ref.refresh(customersProvider);
     // After sync, clear the box
     await _clearQueue();
     setState(() {});
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Sync completed!')),
     );
@@ -53,7 +58,8 @@ class _SalesQueuePageState extends State<SalesQueuePage> {
 
   /// Show a styled pop-up (AlertDialog) with detailed sale information
   void _showSaleDetails(OfflineSale sale) {
-    final formattedDate = DateFormat('yyyy-MM-dd hh:mm a').format(sale.createdAt);
+    final formattedDate =
+        DateFormat('yyyy-MM-dd hh:mm a').format(sale.createdAt);
     // Use customerPhone if available; otherwise use newCustomerPhone.
     final phoneNumber = sale.customerPhone ?? sale.newCustomerPhone ?? 'N/A';
 
@@ -165,7 +171,8 @@ class _SalesQueuePageState extends State<SalesQueuePage> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('[SalesQueuePage] build() called. Box open: ${Hive.isBoxOpen('offline_sales')}');
+    debugPrint(
+        '[SalesQueuePage] build() called. Box open: ${Hive.isBoxOpen('offline_sales')}');
 
     if (!Hive.isBoxOpen('offline_sales')) {
       debugPrint('[SalesQueuePage] Box not open yet => show spinner');
@@ -173,7 +180,8 @@ class _SalesQueuePageState extends State<SalesQueuePage> {
     }
 
     final unsyncedSales = salesBox.values.toList();
-    debugPrint('[SalesQueuePage] unsyncedSales.length = ${unsyncedSales.length}');
+    debugPrint(
+        '[SalesQueuePage] unsyncedSales.length = ${unsyncedSales.length}');
 
     return Scaffold(
       appBar: AppBar(
@@ -212,7 +220,8 @@ class _SalesQueuePageState extends State<SalesQueuePage> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           title: const Text('Clear Queue'),
-                          content: const Text('Are you sure you want to remove all unsynced sales?'),
+                          content: const Text(
+                              'Are you sure you want to remove all unsynced sales?'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(ctx, false),
@@ -249,15 +258,18 @@ class _SalesQueuePageState extends State<SalesQueuePage> {
                     itemCount: unsyncedSales.length,
                     itemBuilder: (context, index) {
                       final sale = unsyncedSales[index];
-                      final customerLabel = sale.customerName ?? 'Unknown Customer';
+                      final customerLabel =
+                          sale.customerName ?? 'Unknown Customer';
                       final productLabel = sale.productName ?? 'No Product';
 
                       return Card(
                         margin: const EdgeInsets.all(8),
                         elevation: 3,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                         child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
                           leading: const Icon(Icons.pending_actions, size: 30),
                           title: Text(
                             customerLabel,

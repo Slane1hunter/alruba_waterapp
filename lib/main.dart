@@ -1,3 +1,4 @@
+import 'package:alruba_waterapp/models/customer.dart';
 import 'package:alruba_waterapp/models/offline_sale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -38,7 +39,7 @@ void main() async {
   // 3) Initialize Supabase
   await SupabaseService.initialize(
     url: 'https://iqjknqbjrbouicdanjjm.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxamtucWJqcmJvdWljZGFuamptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExOTg1MDAsImV4cCI6MjA1Njc3NDUwMH0.6aOm7o3FKypk72T6hXACsi0odzDsF9I-FLpo9krmDIM',
   );
   // 4) Run app with ProviderScope
   runApp(const ProviderScope(child: MyApp()));
