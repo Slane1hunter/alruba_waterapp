@@ -2,7 +2,7 @@ import 'package:hive/hive.dart';
 
 part 'customer.g.dart';
 
-@HiveType(typeId: 2)
+@HiveType(typeId: 3)
 class Customer extends HiveObject {
   @HiveField(0)
   String? localId;   // local only, if you want

@@ -32,7 +32,7 @@ void main() async {
   // 2) Register your Hive adapters
   // Example:
   // Hive.registerAdapter(SaleAdapter()); 
-  // Hive.registerAdapter(CustomerAdapter());
+    Hive.registerAdapter(CustomerAdapter());
     Hive.registerAdapter(OfflineSaleAdapter());
 
 
