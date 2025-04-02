@@ -42,7 +42,8 @@ class CustomerLocationDropdown extends StatelessWidget {
 
 /// Widget for fetching and displaying the current (exact) location.
 class ExactLocationWidget extends StatefulWidget {
-  const ExactLocationWidget({super.key});
+  final ValueChanged<String>? onLocationSelected;
+  const ExactLocationWidget({super.key, this.onLocationSelected});
 
   @override
   State<ExactLocationWidget> createState() => _ExactLocationWidgetState();
@@ -91,6 +92,11 @@ class _ExactLocationWidgetState extends State<ExactLocationWidget> {
           _exactLocation =
               '${placemark.street}, ${placemark.locality}, ${placemark.country}';
           _exactLocationCtrl.text = _exactLocation!;
+
+          // Call parent callback to pass the location up
+          if (widget.onLocationSelected != null) {
+            widget.onLocationSelected!(_exactLocation!);
+          }
         });
       }
     } catch (e) {

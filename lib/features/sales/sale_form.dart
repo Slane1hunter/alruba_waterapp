@@ -13,7 +13,6 @@ import 'package:alruba_waterapp/providers/products_provider.dart';
 import 'package:alruba_waterapp/providers/location_provider.dart';
 
 // Custom widgets
-import 'widgets/customer_selection_field.dart';
 import 'widgets/customer_location_field.dart';
 import 'widgets/product_dropdown.dart';
 import 'widgets/pricing_section.dart';
@@ -43,8 +42,8 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
   String? _newCustomerPhone;
   String? _newCustomerType; // 'distributor' or 'regular'
   String? _newCustomerLocation; // location ID from dropdown
-  // Declare _preciseLocation so it can be updated (e.g. by your ExactLocationWidget)
-  String? _preciseLocation;
+  String?
+      _preciseLocation; // used for storing location from ExactLocationWidget
 
   final List<String> _placeholderTypes = ['distributor', 'regular'];
 
@@ -100,11 +99,11 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
     if (_selectedProduct == null) return;
     bool isDistributor = false;
     if (_isNewCustomer) {
-      if (_newCustomerType == 'distributor' || _newCustomerType == 'market') {
+      if (_newCustomerType == 'distributor') {
         isDistributor = true;
       }
     } else {
-      // For existing customers, assume 'regular' for demonstration.
+      // For existing customers, assume 'regular'
       isDistributor = false;
     }
 
@@ -117,79 +116,76 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
   }
 
   String _defaultLocationId() {
-    // Replace with an actual valid location id from your locations table.
+    // Replace with an actual valid location id if needed
     return '17c1cb39-7b97-494b-be85-bae7290cd54c';
   }
 
-  /// Save sale offline with product/customer details.
-Future<void> _submitFormOffline() async {
-  if (!_formKey.currentState!.validate()) return;
-  _formKey.currentState!.save();
+  /// Save sale offline with product/customer details
+  Future<void> _submitFormOffline() async {
+    if (!_formKey.currentState!.validate()) return;
+    _formKey.currentState!.save();
 
-  String? customerId;
-  // For new customers, add their info to the offline customer box.
-  if (_isNewCustomer) {
-    // Create a new Customer object (ensure your Customer model has these fields)
-    final newLocalCustomer = Customer(
-      name: _newCustomerName ?? "Unknown Customer",
-      phone: _newCustomerPhone ?? "",
-      type: _newCustomerType ?? "regular",
+    String? customerId;
+    // For new customers, store them offline
+    if (_isNewCustomer) {
+      final newLocalCustomer = Customer(
+        name: _newCustomerName ?? "Unknown Customer",
+        phone: _newCustomerPhone ?? "",
+        type: _newCustomerType ?? "regular",
+        locationId: _newCustomerLocation ?? _defaultLocationId(),
+        preciseLocation: _preciseLocation,
+      );
+
+      final customerBox = await Hive.openBox<Customer>('offline_customers');
+      await customerBox.add(newLocalCustomer);
+
+      // Sync logic will create them in Supabase
+      customerId = null;
+    } else {
+      // For existing
+      customerId = _existingCustomerId;
+    }
+
+    final phoneToStore =
+        _isNewCustomer ? _newCustomerPhone : _existingCustomerPhone;
+    final saleCustomerName =
+        _isNewCustomer ? _newCustomerName : _existingCustomerName;
+    final qty = int.tryParse(_quantityController.text) ?? 0;
+    final price = double.tryParse(_priceController.text) ?? 0.0;
+
+    final offlineSale = OfflineSale(
+      isNewCustomer: _isNewCustomer,
+      newCustomerPhone: _isNewCustomer ? _newCustomerPhone : null,
+      existingCustomerId: customerId,
+      customerName: saleCustomerName,
+      customerPhone: phoneToStore,
+      productId: _selectedProduct?.id,
+      productName: _selectedProduct?.name,
+      pricePerUnit: price,
+      quantity: qty,
+      totalPrice: _totalPrice,
+      paymentStatus: _paymentStatus,
+      notes: _paymentStatus == 'Unpaid' && _notesController.text.isNotEmpty
+          ? _notesController.text
+          : null,
+      createdAt: DateTime.now(),
+      soldBy: Supabase.instance.client.auth.currentUser?.id ?? 'unknown',
       locationId: _newCustomerLocation ?? _defaultLocationId(),
       preciseLocation: _preciseLocation,
     );
 
-    // Insert the new customer into the offline customers box.
-    final customerBox = await Hive.openBox<Customer>('offline_customers');
-    await customerBox.add(newLocalCustomer);
+    debugPrint("[MakeSalePage] OfflineSale: $offlineSale");
+    await OfflineSalesQueue.addSale(offlineSale);
 
-    // Leave customerId null so that during sync, the service will
-    // lookup by phone and insert the new customer remotely.
-    customerId = null;
-  } else {
-    // For existing customers, use their existing ID.
-    customerId = _existingCustomerId;
+    final queuedSales = await OfflineSalesQueue.getAllSales();
+    debugPrint(
+        "[MakeSalePage] Total unsynced sales in queue: ${queuedSales.length}");
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sale queued for sync!')),
+    );
   }
-
-  final phoneToStore = _isNewCustomer ? _newCustomerPhone : _existingCustomerPhone;
-  final saleCustomerName = _isNewCustomer ? _newCustomerName : _existingCustomerName;
-  final qty = int.tryParse(_quantityController.text) ?? 0;
-  final price = double.tryParse(_priceController.text) ?? 0.0;
-
-  // Build the OfflineSale record.
-  final offlineSale = OfflineSale(
-    isNewCustomer: _isNewCustomer,
-    newCustomerPhone: _isNewCustomer ? _newCustomerPhone : null,
-    existingCustomerId: customerId,
-    customerName: saleCustomerName,
-    customerPhone: phoneToStore,
-    productId: _selectedProduct?.id,
-    productName: _selectedProduct?.name,
-    pricePerUnit: price,
-    quantity: qty,
-    totalPrice: _totalPrice,
-    paymentStatus: _paymentStatus,
-    notes: _paymentStatus == 'Unpaid' && _notesController.text.isNotEmpty ? _notesController.text : null,
-    createdAt: DateTime.now(),
-    soldBy: Supabase.instance.client.auth.currentUser?.id ?? 'unknown',
-    locationId: _newCustomerLocation ?? _defaultLocationId(),
-    preciseLocation: _preciseLocation,
-  );
-
-  debugPrint("[MakeSalePage] OfflineSale: $offlineSale");
-
-  // Add the sale to the Hive offline queue.
-  await OfflineSalesQueue.addSale(offlineSale);
-
-  // Verify that the sale has been added.
-  final queuedSales = await OfflineSalesQueue.getAllSales();
-  debugPrint("[MakeSalePage] Total unsynced sales in queue: ${queuedSales.length}");
-
-  if (!mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('Sale queued for sync!'))
-  );
-}
-
 
   // ----------------------------
   // UI
@@ -212,7 +208,9 @@ Future<void> _submitFormOffline() async {
           key: _formKey,
           child: Column(
             children: [
+              // --------------------------------
               // Customer Card
+              // --------------------------------
               Card(
                 elevation: 3,
                 shape: RoundedRectangleBorder(
@@ -224,7 +222,7 @@ Future<void> _submitFormOffline() async {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Switch between new/existing customer
+                      // Switch between new/existing
                       Row(
                         children: [
                           const Icon(Icons.person_outline, size: 20),
@@ -255,11 +253,13 @@ Future<void> _submitFormOffline() async {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      // Existing Customer selection
+
+                      // If NOT new customer, show a styled button
                       if (!_isNewCustomer)
                         customersAsync.when(
-                          loading: () =>
-                              const Center(child: CircularProgressIndicator()),
+                          loading: () => const Center(
+                            child: CircularProgressIndicator(),
+                          ),
                           error: (err, st) => Text('Error: $err'),
                           data: (customerList) {
                             final mapped = customerList.map((c) {
@@ -269,26 +269,95 @@ Future<void> _submitFormOffline() async {
                                 'phone': c['phone'].toString(),
                               };
                             }).toList();
-                            return CustomerSelectionField(
-                              isNewCustomer: _isNewCustomer,
-                              selectedCustomer: _existingCustomerId,
-                              onCustomerChanged: (val) {
-                                setState(() {
-                                  _existingCustomerId = val;
-                                  final found = mapped.firstWhere(
-                                    (x) => x['id'] == val,
-                                    orElse: () =>
-                                        {'name': 'Unknown', 'phone': 'N/A'},
-                                  );
-                                  _existingCustomerName = found['name'];
-                                  _existingCustomerPhone = found['phone'];
-                                });
-                              },
-                              customers: mapped,
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // "Select Existing Customer" styled button
+                                ElevatedButton.icon(
+                                  icon: const Icon(Icons.people_alt),
+                                  label: Text(_existingCustomerName ??
+                                      'Select Existing Customer'),
+                                  style: ElevatedButton.styleFrom(
+                                    // Set the background to white
+                                    backgroundColor: Colors.white,
+                                    // Text/Icon color should contrast with white (e.g., black)
+                                    foregroundColor: Colors.black,
+                                    minimumSize: const Size.fromHeight(48),
+                                    textStyle: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      side: const BorderSide(
+                                          color:
+                                              Colors.grey), // optional border
+                                    ),
+                                    elevation:
+                                        2, // small shadow helps button stand out on light background
+                                  ),
+                                  onPressed: () async {
+                                    // same logic as before
+                                    final chosen = await showModalBottomSheet<
+                                        Map<String, String>>(
+                                      context: context,
+                                      isScrollControlled: true,
+                                      backgroundColor: Colors.transparent,
+                                      builder: (ctx) => _CustomerSearchSheet(
+                                          customers: mapped),
+                                    );
+                                    if (chosen != null) {
+                                      setState(() {
+                                        _existingCustomerId = chosen['id'];
+                                        _existingCustomerName = chosen['name'];
+                                        _existingCustomerPhone =
+                                            chosen['phone'];
+                                      });
+                                    }
+                                  },
+                                ),
+
+                                const SizedBox(height: 8),
+
+                                // Show the selected customer in a "Chip" style
+                                if (_existingCustomerId != null)
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: theme
+                                          .colorScheme.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.person_pin),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '$_existingCustomerName',
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '($_existingCustomerPhone)',
+                                          style: theme.textTheme.bodySmall,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             );
                           },
                         ),
-                      // New Customer fields
+
+                      // If NEW customer
                       if (_isNewCustomer) ...[
                         TextFormField(
                           decoration: const InputDecoration(
@@ -334,35 +403,46 @@ Future<void> _submitFormOffline() async {
                         ),
                         const SizedBox(height: 16),
                         locationsAsync.when(
-                          loading: () =>
-                              const Center(child: CircularProgressIndicator()),
+                          loading: () => const Center(
+                            child: CircularProgressIndicator(),
+                          ),
                           error: (err, st) => Text('Error: $err'),
                           data: (locList) {
-                            // Assume locList returns objects with id and name properties.
                             final mappedLocs = locList.map((loc) {
                               return {
-                                'id': loc
-                                    .id, // Using as-is, assuming it's a String.
+                                'id': loc.id,
                                 'name': loc.name.toString(),
                               };
                             }).toList();
+
                             return CustomerLocationDropdown(
                               selectedLocation: _newCustomerLocation,
                               onLocationChanged: (val) =>
                                   setState(() => _newCustomerLocation = val),
-                              locations:
-                                  List<Map<String, String>>.from(mappedLocs),
+                              locations: List<Map<String, String>>.from(
+                                mappedLocs,
+                              ),
                             );
                           },
                         ),
                         const SizedBox(height: 16),
-                        const ExactLocationWidget(),
+                        // Suppose you have an ExactLocationWidget with callback
+                        ExactLocationWidget(
+                          onLocationSelected: (val) {
+                            setState(() {
+                              _preciseLocation = val;
+                            });
+                          },
+                        ),
                       ],
                     ],
                   ),
                 ),
               ),
+
+              // --------------------------------
               // Product & Pricing Card
+              // --------------------------------
               Card(
                 elevation: 3,
                 shape: RoundedRectangleBorder(
@@ -389,7 +469,8 @@ Future<void> _submitFormOffline() async {
                       const SizedBox(height: 16),
                       ref.watch(productsProvider).when(
                             loading: () => const Center(
-                                child: CircularProgressIndicator()),
+                              child: CircularProgressIndicator(),
+                            ),
                             error: (err, st) => Text('Product Error: $err'),
                             data: (prodList) {
                               final typed = prodList as List<Product>;
@@ -420,7 +501,10 @@ Future<void> _submitFormOffline() async {
                   ),
                 ),
               ),
+
+              // --------------------------------
               // Payment Card
+              // --------------------------------
               Card(
                 elevation: 3,
                 shape: RoundedRectangleBorder(
@@ -468,7 +552,10 @@ Future<void> _submitFormOffline() async {
                   ),
                 ),
               ),
+
+              // --------------------------------
               // Submit Button
+              // --------------------------------
               SaleFormSubmitButton(
                 onPressed: _submitFormOffline,
               ),
@@ -477,5 +564,127 @@ Future<void> _submitFormOffline() async {
         ),
       ),
     );
+  }
+}
+
+// ---------------------------------------------------------------
+// This is a stylish bottom sheet with DraggableScrollableSheet
+// ---------------------------------------------------------------
+class _CustomerSearchSheet extends StatefulWidget {
+  final List<Map<String, String>> customers;
+  const _CustomerSearchSheet({Key? key, required this.customers})
+      : super(key: key);
+
+  @override
+  State<_CustomerSearchSheet> createState() => _CustomerSearchSheetState();
+}
+
+class _CustomerSearchSheetState extends State<_CustomerSearchSheet> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  late List<Map<String, String>> _filteredCustomers;
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredCustomers = widget.customers;
+    _searchCtrl.addListener(_filterList);
+  }
+
+  void _filterList() {
+    final query = _searchCtrl.text.trim().toLowerCase();
+    setState(() {
+      _filteredCustomers = query.isEmpty
+          ? widget.customers
+          : widget.customers.where((c) {
+              final name = c['name']!.toLowerCase();
+              return name.contains(query);
+            }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.5, // half screen
+      minChildSize: 0.3, // can’t go smaller than 30%
+      maxChildSize: 0.9, // can drag up to 90% of screen
+      builder: (context, scrollController) {
+        return Container(
+          // Make background visible (default is transparent)
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+          ),
+          child: Column(
+            children: [
+              // A small handle at the top
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[400],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Optional title
+              Text(
+                'Select a Customer',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Search bar
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: _searchCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Search Customer',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // The scrollable list of matched customers
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController, // link to DraggableSheet
+                  itemCount: _filteredCustomers.length,
+                  itemBuilder: (ctx, i) {
+                    final cust = _filteredCustomers[i];
+                    return ListTile(
+                      title: Text(cust['name']!),
+                      subtitle: Text(cust['phone'] ?? ''),
+                      onTap: () {
+                        // Return the selected customer
+                        Navigator.pop(context, cust);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 }

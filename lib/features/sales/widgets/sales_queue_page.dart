@@ -15,52 +15,36 @@ class SalesQueuePage extends ConsumerStatefulWidget {
 }
 
 class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
-  // Now you can use ref
-  late Box<OfflineSale> salesBox;
-
-  @override
-  void initState() {
-    super.initState();
-    _initBox();
-  }
-
-  Future<void> _initBox() async {
-    try {
-      debugPrint('[SalesQueuePage] Opening offline_sales box...');
-      salesBox = await Hive.openBox<OfflineSale>('offline_sales');
-      debugPrint('[SalesQueuePage] Box opened successfully!');
-    } catch (e, st) {
-      debugPrint('[SalesQueuePage] Error opening box: $e');
-      debugPrint('[SalesQueuePage] Stack: $st');
-      // Optionally show an error UI here
-    }
-    if (!mounted) return;
-    setState(() {});
-  }
 
   Future<void> _syncSales() async {
+    // 1) Sync offline data
     await OfflineSyncService().syncOfflineData();
-    if (!mounted) return;
-    ref.refresh(customersProvider);
-    // After sync, clear the box
-    await _clearQueue();
-    setState(() {});
 
+    // 2) Refresh the customers if needed
+    ref.refresh(customersProvider);
+
+    // 3) Clear the local queue
+    final box = Hive.box<OfflineSale>('offline_sales');
+    await box.clear();
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Sync completed!')),
     );
   }
 
   Future<void> _clearQueue() async {
-    await salesBox.clear();
-    setState(() {});
+    final box = Hive.box<OfflineSale>('offline_sales');
+    await box.clear();
+
+    if (!mounted) return;
+    setState(() {}); // or rely on ValueListenableBuilder auto-update
   }
 
-  /// Show a styled pop-up (AlertDialog) with detailed sale information
+  /// Shows a pop-up with detailed sale information
   void _showSaleDetails(OfflineSale sale) {
     final formattedDate =
         DateFormat('yyyy-MM-dd hh:mm a').format(sale.createdAt);
-    // Use customerPhone if available; otherwise use newCustomerPhone.
     final phoneNumber = sale.customerPhone ?? sale.newCustomerPhone ?? 'N/A';
 
     showDialog(
@@ -78,80 +62,54 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Phone: $phoneNumber',
-                  style: const TextStyle(fontSize: 16, color: Colors.grey),
-                ),
+                Text('Phone: $phoneNumber', style: const TextStyle(fontSize: 16, color: Colors.grey)),
                 const SizedBox(height: 10),
                 const Divider(thickness: 1.2),
                 const SizedBox(height: 10),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Product: ',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Expanded(
-                      child: Text(sale.productName ?? 'No Product'),
-                    ),
+                    const Text('Product: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Expanded(child: Text(sale.productName ?? 'No Product')),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text(
-                      'Quantity: ',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    const Text('Quantity: ', style: TextStyle(fontWeight: FontWeight.bold)),
                     Text('${sale.quantity}'),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text(
-                      'Price/Unit: ',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    const Text('Price/Unit: ', style: TextStyle(fontWeight: FontWeight.bold)),
                     Text('\$${sale.pricePerUnit.toStringAsFixed(2)}'),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text(
-                      'Total: ',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    const Text('Total: ', style: TextStyle(fontWeight: FontWeight.bold)),
                     Text('\$${sale.totalPrice.toStringAsFixed(2)}'),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text(
-                      'Payment: ',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    const Text('Payment: ', style: TextStyle(fontWeight: FontWeight.bold)),
                     Text(sale.paymentStatus),
                   ],
                 ),
                 if (sale.notes != null && sale.notes!.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  const Text(
-                    'Notes:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                  const Text('Notes:', style: TextStyle(fontWeight: FontWeight.bold)),
                   Text(sale.notes!),
                 ],
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text(
-                      'Created At: ',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    const Text('Created At: ', style: TextStyle(fontWeight: FontWeight.bold)),
                     Text(formattedDate),
                   ],
                 ),
@@ -171,25 +129,13 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint(
-        '[SalesQueuePage] build() called. Box open: ${Hive.isBoxOpen('offline_sales')}');
-
-    if (!Hive.isBoxOpen('offline_sales')) {
-      debugPrint('[SalesQueuePage] Box not open yet => show spinner');
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    final unsyncedSales = salesBox.values.toList();
-    debugPrint(
-        '[SalesQueuePage] unsyncedSales.length = ${unsyncedSales.length}');
-
+    // Instead of manually opening the box, rely on Hive.box<OfflineSale>('offline_sales') directly
     return Scaffold(
       appBar: AppBar(
         title: const Text("Today's Sales Queue"),
       ),
       body: Column(
         children: [
-          // Row with two separate buttons for syncing and clearing the queue
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
@@ -220,8 +166,7 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           title: const Text('Clear Queue'),
-                          content: const Text(
-                              'Are you sure you want to remove all unsynced sales?'),
+                          content: const Text('Are you sure you want to remove all unsynced sales?'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(ctx, false),
@@ -245,48 +190,60 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
               ],
             ),
           ),
-          // List of unsynced sales
+
+          // Use ValueListenableBuilder to auto-update whenever offline_sales changes
           Expanded(
-            child: unsyncedSales.isEmpty
-                ? const Center(
+            child: ValueListenableBuilder<Box<OfflineSale>>(
+              valueListenable: Hive.box<OfflineSale>('offline_sales').listenable(),
+              builder: (context, box, _) {
+                final unsyncedSales = box.values.toList();
+                if (unsyncedSales.isEmpty) {
+                  return const Center(
                     child: Text(
                       'No unsynced sales!',
                       style: TextStyle(fontSize: 18),
                     ),
-                  )
-                : ListView.builder(
-                    itemCount: unsyncedSales.length,
-                    itemBuilder: (context, index) {
-                      final sale = unsyncedSales[index];
-                      final customerLabel =
-                          sale.customerName ?? 'Unknown Customer';
-                      final productLabel = sale.productName ?? 'No Product';
+                  );
+                }
 
-                      return Card(
-                        margin: const EdgeInsets.all(8),
-                        elevation: 3,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          leading: const Icon(Icons.pending_actions, size: 30),
-                          title: Text(
-                            customerLabel,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            'Product: $productLabel\nQty: ${sale.quantity} | \$${sale.pricePerUnit.toStringAsFixed(2)}',
-                          ),
-                          trailing: Text(
-                            '\$${sale.totalPrice.toStringAsFixed(2)}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          onTap: () => _showSaleDetails(sale),
+                return ListView.builder(
+                  itemCount: unsyncedSales.length,
+                  itemBuilder: (context, index) {
+                    final sale = unsyncedSales[index];
+                    final customerLabel = sale.customerName ?? 'Unknown Customer';
+                    final productLabel = sale.productName ?? 'No Product';
+
+                    return Card(
+                      margin: const EdgeInsets.all(8),
+                      elevation: 3,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, 
+                          vertical: 10
                         ),
-                      );
-                    },
-                  ),
+                        leading: const Icon(Icons.pending_actions, size: 30),
+                        title: Text(
+                          customerLabel,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          'Product: $productLabel\n'
+                          'Qty: ${sale.quantity} | \$${sale.pricePerUnit.toStringAsFixed(2)}',
+                        ),
+                        trailing: Text(
+                          '\$${sale.totalPrice.toStringAsFixed(2)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        onTap: () => _showSaleDetails(sale),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),

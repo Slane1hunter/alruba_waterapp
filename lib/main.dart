@@ -34,6 +34,8 @@ void main() async {
   // Hive.registerAdapter(SaleAdapter()); 
     Hive.registerAdapter(CustomerAdapter());
     Hive.registerAdapter(OfflineSaleAdapter());
+    await Hive.openBox<OfflineSale>('offline_sales');
+
 
 
   // 3) Initialize Supabase
