@@ -1,11 +1,13 @@
 import 'package:alruba_waterapp/models/customer.dart';
+import 'package:alruba_waterapp/models/offline_gallon_transaction.dart';
+import 'package:alruba_waterapp/services/offline_gallon_queue.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../models/offline_sale.dart';
-import '../../services/offline_sales_queue.dart';
+import '../../../../../models/offline_sale.dart';
+import '../../../../../services/offline_sales_queue.dart';
 
 // Providers
 import 'package:alruba_waterapp/providers/customers_provider.dart';
@@ -42,8 +44,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
   String? _newCustomerPhone;
   String? _newCustomerType; // 'distributor' or 'regular'
   String? _newCustomerLocation; // location ID from dropdown
-  String?
-      _preciseLocation; // used for storing location from ExactLocationWidget
+  String? _preciseLocation; // used for storing location from ExactLocationWidget
 
   final List<String> _placeholderTypes = ['distributor', 'regular'];
 
@@ -180,7 +181,18 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
     final queuedSales = await OfflineSalesQueue.getAllSales();
     debugPrint(
         "[MakeSalePage] Total unsynced sales in queue: ${queuedSales.length}");
-
+// 2) If product is refillable, also record container movement
+  if (_selectedProduct != null && _selectedProduct!.isRefillable) {
+    final containerTx = OfflineGallonTransaction(
+      customerId: customerId ?? 'unknown',
+      productId: _selectedProduct!.id,
+      quantity: qty, // if it's a deposit or purchase, +qty. A return would be -qty
+      transactionType: 'purchase', // or 'deposit', etc
+      status: _paymentStatus,       // 'paid', 'unpaid'
+      createdAt: DateTime.now(),
+    );
+    await OfflineGallonQueue.addTransaction(containerTx);
+  }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Sale queued for sync!')),
@@ -273,16 +285,13 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // "Select Existing Customer" styled button
                                 ElevatedButton.icon(
                                   icon: const Icon(Icons.people_alt),
                                   label: Text(_existingCustomerName ??
                                       'Select Existing Customer'),
                                   style: ElevatedButton.styleFrom(
-                                    // Set the background to white
-                                    backgroundColor: Colors.white,
-                                    // Text/Icon color should contrast with white (e.g., black)
-                                    foregroundColor: Colors.black,
+                                    backgroundColor: Colors.blue[500],
+                                    foregroundColor: Colors.white,
                                     minimumSize: const Size.fromHeight(48),
                                     textStyle: const TextStyle(
                                       fontSize: 16,
@@ -290,15 +299,11 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                                     ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      side: const BorderSide(
-                                          color:
-                                              Colors.grey), // optional border
+                                      side: const BorderSide(color: Colors.grey),
                                     ),
-                                    elevation:
-                                        2, // small shadow helps button stand out on light background
+                                    elevation: 2,
                                   ),
                                   onPressed: () async {
-                                    // same logic as before
                                     final chosen = await showModalBottomSheet<
                                         Map<String, String>>(
                                       context: context,
@@ -320,7 +325,6 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
 
                                 const SizedBox(height: 8),
 
-                                // Show the selected customer in a "Chip" style
                                 if (_existingCustomerId != null)
                                   Container(
                                     decoration: BoxDecoration(
@@ -426,7 +430,6 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                           },
                         ),
                         const SizedBox(height: 16),
-                        // Suppose you have an ExactLocationWidget with callback
                         ExactLocationWidget(
                           onLocationSelected: (val) {
                             setState(() {
@@ -612,7 +615,6 @@ class _CustomerSearchSheetState extends State<_CustomerSearchSheet> {
       maxChildSize: 0.9, // can drag up to 90% of screen
       builder: (context, scrollController) {
         return Container(
-          // Make background visible (default is transparent)
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             borderRadius: const BorderRadius.only(
@@ -622,7 +624,6 @@ class _CustomerSearchSheetState extends State<_CustomerSearchSheet> {
           ),
           child: Column(
             children: [
-              // A small handle at the top
               const SizedBox(height: 12),
               Container(
                 width: 40,
@@ -633,8 +634,6 @@ class _CustomerSearchSheetState extends State<_CustomerSearchSheet> {
                 ),
               ),
               const SizedBox(height: 12),
-
-              // Optional title
               Text(
                 'Select a Customer',
                 style: theme.textTheme.titleMedium?.copyWith(
@@ -642,8 +641,6 @@ class _CustomerSearchSheetState extends State<_CustomerSearchSheet> {
                 ),
               ),
               const SizedBox(height: 16),
-
-              // Search bar
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: TextField(
@@ -656,11 +653,9 @@ class _CustomerSearchSheetState extends State<_CustomerSearchSheet> {
                 ),
               ),
               const SizedBox(height: 8),
-
-              // The scrollable list of matched customers
               Expanded(
                 child: ListView.builder(
-                  controller: scrollController, // link to DraggableSheet
+                  controller: scrollController,
                   itemCount: _filteredCustomers.length,
                   itemBuilder: (ctx, i) {
                     final cust = _filteredCustomers[i];
@@ -668,7 +663,6 @@ class _CustomerSearchSheetState extends State<_CustomerSearchSheet> {
                       title: Text(cust['name']!),
                       subtitle: Text(cust['phone'] ?? ''),
                       onTap: () {
-                        // Return the selected customer
                         Navigator.pop(context, cust);
                       },
                     );

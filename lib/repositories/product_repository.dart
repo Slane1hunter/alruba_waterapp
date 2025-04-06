@@ -9,12 +9,13 @@ final productRepositoryProvider = Provider<ProductRepository>((ref) {
 class ProductRepository {
   // Fetch all products
   Future<List<Product>> fetchProducts() async {
+    // CHANGED: select('id, name, home_price, market_price, production_cost, is_refillable')
     final response = await SupabaseService.client
         .from('products')
-        .select('*'); // returns List<dynamic>
+        .select('id, name, home_price, market_price, production_cost, is_refillable'); 
 
-    return response.map((item) => Product.fromMap(item)).toList();
-      // If something unexpected happens
+    // parse JSON into Product objects
+    return response.map<Product>((item) => Product.fromMap(item)).toList();
   }
 
   // Add a new product - returns the newly created row
@@ -23,9 +24,9 @@ class ProductRepository {
     required double homePrice,
     required double marketPrice,
     required double productionCost,
+    bool isRefillable = false, // NEW if you want to set it on creation
   }) async {
     // Force PostgREST to return the inserted row by calling .select()
-    // and then .single() so we parse exactly one row
     final inserted = await SupabaseService.client
         .from('products')
         .insert({
@@ -33,10 +34,10 @@ class ProductRepository {
           'home_price': homePrice,
           'market_price': marketPrice,
           'production_cost': productionCost,
+          'is_refillable': isRefillable, // CHANGED
         })
         .select()
         .single();
-    // inserted is a Map, parse to Product
     return Product.fromMap(inserted);
   }
 
@@ -47,6 +48,7 @@ class ProductRepository {
     required double homePrice,
     required double marketPrice,
     required double productionCost,
+    bool isRefillable = false, // NEW
   }) async {
     final updated = await SupabaseService.client
         .from('products')
@@ -55,6 +57,7 @@ class ProductRepository {
           'home_price': homePrice,
           'market_price': marketPrice,
           'production_cost': productionCost,
+          'is_refillable': isRefillable, // CHANGED
         })
         .eq('id', productId)
         .select()

@@ -2,7 +2,7 @@ import 'package:alruba_waterapp/models/product.dart';
 import 'package:flutter/material.dart';
 
 class ProductDropdown extends StatelessWidget {
-  final Product? selectedProduct;               // or just selectedProductId
+  final Product? selectedProduct;
   final ValueChanged<Product?> onProductChanged;
   final List<Product> products;
 
@@ -22,9 +22,12 @@ class ProductDropdown extends StatelessWidget {
       ),
       value: selectedProduct,
       items: products.map((p) {
+        // NEW: Show '(Refillable)' if p.isRefillable is true
+        final displayName = p.isRefillable ? '${p.name} (Refillable)' : p.name;
+
         return DropdownMenuItem<Product>(
           value: p,
-          child: Text(p.name),
+          child: Text(displayName),
         );
       }).toList(),
       onChanged: onProductChanged,

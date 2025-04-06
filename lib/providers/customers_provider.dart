@@ -8,11 +8,6 @@ final customersProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async
 
   print("Response runtimeType: ${response.runtimeType}");
   
-  if (response is List) {
-    print("Fetched customers count: ${response.length}");
-    return response.cast<Map<String, dynamic>>();
-  } else {
-    print("Unexpected response format: $response");
-    throw Exception('Unexpected response format: ${response.runtimeType}');
-  }
+  print("Fetched customers count: ${response.length}");
+  return response.cast<Map<String, dynamic>>();
 });

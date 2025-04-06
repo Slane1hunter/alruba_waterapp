@@ -1,11 +1,11 @@
+import 'package:alruba_waterapp/models/offline_gallon_transaction.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
-
-import '../../../models/offline_sale.dart';
-import '../../../providers/customers_provider.dart';
-import '../../../services/offline_sync_service.dart';
+import 'package:alruba_waterapp/models/offline_sale.dart';
+import 'package:alruba_waterapp/providers/customers_provider.dart';
+import 'package:alruba_waterapp/services/offline_sync_service.dart';
 
 class SalesQueuePage extends ConsumerStatefulWidget {
   const SalesQueuePage({super.key});
@@ -15,33 +15,52 @@ class SalesQueuePage extends ConsumerStatefulWidget {
 }
 
 class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
+  bool _isSyncing = false;
 
   Future<void> _syncSales() async {
-    // 1) Sync offline data
-    await OfflineSyncService().syncOfflineData();
+    setState(() {
+      _isSyncing = true;
+    });
+    try {
+      // 1) Sync offline data (including customer, sale, and gallon transactions)
+      await OfflineSyncService().syncOfflineData();
 
-    // 2) Refresh the customers if needed
-    ref.refresh(customersProvider);
+      // 2) Refresh customers if needed
+      ref.refresh(customersProvider);
 
-    // 3) Clear the local queue
-    final box = Hive.box<OfflineSale>('offline_sales');
-    await box.clear();
+      // 3) Clear the offline sales box
+      final salesBox = Hive.box<OfflineSale>('offline_sales');
+      await salesBox.clear();
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sync completed!')),
-    );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sync completed successfully!')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sync failed: $e')),
+      );
+    } finally {
+      setState(() {
+        _isSyncing = false;
+      });
+    }
   }
 
   Future<void> _clearQueue() async {
-    final box = Hive.box<OfflineSale>('offline_sales');
-    await box.clear();
+    // Clear both sales and gallon transactions
+    final saleBox = Hive.box<OfflineSale>('offline_sales');
+    await saleBox.clear();
+
+    final txBox = await Hive.openBox<OfflineGallonTransaction>(
+        'offline_gallon_transactions');
+    await txBox.clear();
 
     if (!mounted) return;
-    setState(() {}); // or rely on ValueListenableBuilder auto-update
+    setState(() {});
   }
 
-  /// Shows a pop-up with detailed sale information
+  /// Shows a detailed dialog for a sale.
   void _showSaleDetails(OfflineSale sale) {
     final formattedDate =
         DateFormat('yyyy-MM-dd hh:mm a').format(sale.createdAt);
@@ -51,9 +70,8 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           title: Text(
             sale.customerName ?? 'Unknown Customer',
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -62,54 +80,62 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Phone: $phoneNumber', style: const TextStyle(fontSize: 16, color: Colors.grey)),
+                Text('Phone: $phoneNumber',
+                    style: const TextStyle(fontSize: 16, color: Colors.grey)),
                 const SizedBox(height: 10),
                 const Divider(thickness: 1.2),
                 const SizedBox(height: 10),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Product: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('Product: ',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                     Expanded(child: Text(sale.productName ?? 'No Product')),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text('Quantity: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('Quantity: ',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                     Text('${sale.quantity}'),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text('Price/Unit: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('Price/Unit: ',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                     Text('\$${sale.pricePerUnit.toStringAsFixed(2)}'),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text('Total: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('Total: ',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                     Text('\$${sale.totalPrice.toStringAsFixed(2)}'),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text('Payment: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('Payment: ',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                     Text(sale.paymentStatus),
                   ],
                 ),
                 if (sale.notes != null && sale.notes!.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  const Text('Notes:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Notes:',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                   Text(sale.notes!),
                 ],
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text('Created At: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('Created At: ',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                     Text(formattedDate),
                   ],
                 ),
@@ -129,13 +155,16 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
 
   @override
   Widget build(BuildContext context) {
-    // Instead of manually opening the box, rely on Hive.box<OfflineSale>('offline_sales') directly
+    // Read unsynced sale count from Hive box
+    final unsyncedSalesCount = Hive.box<OfflineSale>('offline_sales').length;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Today's Sales Queue"),
       ),
       body: Column(
         children: [
+          // Sync and Clear buttons row
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
@@ -146,9 +175,19 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                       backgroundColor: Colors.blueAccent,
                       minimumSize: const Size.fromHeight(50),
                     ),
-                    onPressed: _syncSales,
-                    icon: const Icon(Icons.cloud_upload),
-                    label: const Text('Sync All'),
+                    onPressed: _isSyncing ? null : _syncSales,
+                    icon: _isSyncing
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.cloud_upload),
+                    label: Text(_isSyncing ? 'Syncing...' : 'Sync All'),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -163,10 +202,10 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                         context: context,
                         builder: (ctx) => AlertDialog(
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                              borderRadius: BorderRadius.circular(12)),
                           title: const Text('Clear Queue'),
-                          content: const Text('Are you sure you want to remove all unsynced sales?'),
+                          content: const Text(
+                              'Are you sure you want to remove all unsynced sales?'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(ctx, false),
@@ -190,11 +229,19 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
               ],
             ),
           ),
-
-          // Use ValueListenableBuilder to auto-update whenever offline_sales changes
+          // Unsynced sale count header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Text(
+              'Unsynced Sales: $unsyncedSalesCount',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+          ),
+          // List of unsynced sales
           Expanded(
             child: ValueListenableBuilder<Box<OfflineSale>>(
-              valueListenable: Hive.box<OfflineSale>('offline_sales').listenable(),
+              valueListenable:
+                  Hive.box<OfflineSale>('offline_sales').listenable(),
               builder: (context, box, _) {
                 final unsyncedSales = box.values.toList();
                 if (unsyncedSales.isEmpty) {
@@ -205,33 +252,28 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                     ),
                   );
                 }
-
                 return ListView.builder(
                   itemCount: unsyncedSales.length,
                   itemBuilder: (context, index) {
                     final sale = unsyncedSales[index];
-                    final customerLabel = sale.customerName ?? 'Unknown Customer';
+                    final customerLabel =
+                        sale.customerName ?? 'Unknown Customer';
                     final productLabel = sale.productName ?? 'No Product';
-
                     return Card(
                       margin: const EdgeInsets.all(8),
                       elevation: 3,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                          borderRadius: BorderRadius.circular(12)),
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, 
-                          vertical: 10
-                        ),
+                            horizontal: 16, vertical: 10),
                         leading: const Icon(Icons.pending_actions, size: 30),
                         title: Text(
                           customerLabel,
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text(
-                          'Product: $productLabel\n'
-                          'Qty: ${sale.quantity} | \$${sale.pricePerUnit.toStringAsFixed(2)}',
+                          'Product: $productLabel\nQty: ${sale.quantity} | \$${sale.pricePerUnit.toStringAsFixed(2)}',
                         ),
                         trailing: Text(
                           '\$${sale.totalPrice.toStringAsFixed(2)}',

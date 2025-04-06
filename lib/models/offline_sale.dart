@@ -43,15 +43,13 @@ class OfflineSale extends HiveObject {
   @HiveField(12)
   String? customerPhone;
 
-  // New required field for the sales table:
   @HiveField(13)
   String soldBy;
 
-  // New field if you need it (for example, for location)
   @HiveField(14)
   String locationId;
 
-    @HiveField(15)
+  @HiveField(15)
   String? preciseLocation;
 
   OfflineSale({
@@ -70,7 +68,6 @@ class OfflineSale extends HiveObject {
     this.customerPhone,
     required this.soldBy,
     required this.locationId,
-        this.preciseLocation,
-
+    this.preciseLocation,
   });
 }

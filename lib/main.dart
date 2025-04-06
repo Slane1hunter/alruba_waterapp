@@ -1,4 +1,10 @@
+import 'package:alruba_waterapp/features/presentation/distrubutor/distributor_home_page.dart';
+import 'package:alruba_waterapp/features/presentation/login_page.dart';
+import 'package:alruba_waterapp/features/presentation/manager_home_page.dart';
+import 'package:alruba_waterapp/features/presentation/owner/owner_home_page.dart';
+import 'package:alruba_waterapp/features/presentation/signup_page.dart';
 import 'package:alruba_waterapp/models/customer.dart';
+import 'package:alruba_waterapp/models/offline_gallon_transaction.dart';
 import 'package:alruba_waterapp/models/offline_sale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,11 +20,6 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'constants/app_colors.dart';
 import 'constants/app_text_styles.dart';
-import 'features/auth/presentation/distributor_home_page.dart';
-import 'features/auth/presentation/login_page.dart';
-import 'features/auth/presentation/manager_home_page.dart';
-import 'features/auth/presentation/owner/owner_home_page.dart';
-import 'features/auth/presentation/signup_page.dart';
 import 'providers/auth_provider.dart';
 import 'providers/role_provider.dart';
 import 'services/supabase_service.dart';
@@ -32,6 +33,7 @@ void main() async {
   // 2) Register your Hive adapters
   // Example:
   // Hive.registerAdapter(SaleAdapter()); 
+    Hive.registerAdapter(OfflineGallonTransactionAdapter());
     Hive.registerAdapter(CustomerAdapter());
     Hive.registerAdapter(OfflineSaleAdapter());
     await Hive.openBox<OfflineSale>('offline_sales');
@@ -146,12 +148,14 @@ class RoleBasedWrapper extends ConsumerWidget {
       case 'manager':
         return const ManagerHome();
       case 'distributor':
-        return const DistributorHomePage();
+        return  DistributorHomePage();
       default:
         return const LoginPage();
     }
   }
 }
+
+
 
 class RoleBasedHome extends ConsumerWidget {
   const RoleBasedHome({super.key});

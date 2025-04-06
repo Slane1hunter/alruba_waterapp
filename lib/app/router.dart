@@ -1,12 +1,12 @@
+import 'package:alruba_waterapp/features/presentation/distrubutor/distributor_home_page.dart';
+import 'package:alruba_waterapp/features/presentation/login_page.dart';
+import 'package:alruba_waterapp/features/presentation/manager_home_page.dart';
+import 'package:alruba_waterapp/features/presentation/owner/owner_home_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../features/auth/presentation/login_page.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/role_provider.dart';
-import '../features/auth/presentation/distributor_home_page.dart';
-import '../features/auth/presentation/manager_home_page.dart';
-import '../features/auth/presentation/owner/owner_home_page.dart';
 
 final router = GoRouter(
   redirect: (context, state) {
