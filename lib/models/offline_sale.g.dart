@@ -27,19 +27,18 @@ class OfflineSaleAdapter extends TypeAdapter<OfflineSale> {
       quantity: fields[7] as int,
       totalPrice: fields[8] as double,
       paymentStatus: fields[9] as String,
-      notes: fields[10] as String?,
-      createdAt: fields[11] as DateTime,
-      customerPhone: fields[12] as String?,
-      soldBy: fields[13] as String,
-      locationId: fields[14] as String,
-      preciseLocation: fields[15] as String?,
+      createdAt: fields[10] as DateTime,
+      customerPhone: fields[11] as String?,
+      soldBy: fields[12] as String,
+      locationId: fields[13] as String,
+      preciseLocation: fields[14] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, OfflineSale obj) {
     writer
-      ..writeByte(16)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.isNewCustomer)
       ..writeByte(1)
@@ -61,16 +60,14 @@ class OfflineSaleAdapter extends TypeAdapter<OfflineSale> {
       ..writeByte(9)
       ..write(obj.paymentStatus)
       ..writeByte(10)
-      ..write(obj.notes)
-      ..writeByte(11)
       ..write(obj.createdAt)
-      ..writeByte(12)
+      ..writeByte(11)
       ..write(obj.customerPhone)
-      ..writeByte(13)
+      ..writeByte(12)
       ..write(obj.soldBy)
-      ..writeByte(14)
+      ..writeByte(13)
       ..write(obj.locationId)
-      ..writeByte(15)
+      ..writeByte(14)
       ..write(obj.preciseLocation);
   }
 

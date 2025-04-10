@@ -1,6 +1,6 @@
 import 'package:alruba_waterapp/features/presentation/distrubutor/distributor_home_page.dart';
 import 'package:alruba_waterapp/features/presentation/login_page.dart';
-import 'package:alruba_waterapp/features/presentation/manager_home_page.dart';
+import 'package:alruba_waterapp/features/presentation/manager/manager_home_page.dart';
 import 'package:alruba_waterapp/features/presentation/owner/owner_home_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -59,7 +59,7 @@ class RoleBasedLayout extends ConsumerWidget {
       case 'owner':
         return const OwnerHomePage();
       case 'manager':
-        return const ManagerHome();
+        return const ManagerHomePage();
       case 'distributor':
         return const DistributorHomePage();
       default:

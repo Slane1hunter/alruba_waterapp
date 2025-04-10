@@ -7,7 +7,6 @@ import '../models/offline_sale.dart';
 
 // If you're tracking refillable containers offline:
 import '../models/offline_gallon_transaction.dart';
-import '../services/offline_gallon_queue.dart';
 
 class OfflineSyncService {
   static const String offlineSalesBoxName = 'offline_sales';
@@ -160,8 +159,8 @@ class OfflineSyncService {
               'quantity': offSale.quantity,
               'price_per_unit': offSale.pricePerUnit,
               'payment_status': offSale.paymentStatus.toLowerCase(),
-              'sold_by': offSale.soldBy ?? client.auth.currentUser?.id,
-              'location_id': offSale.locationId ?? _defaultLocationId(),
+              'sold_by': offSale.soldBy,
+              'location_id': offSale.locationId,
               'created_at': offSale.createdAt.toIso8601String(),
             })
             .select('*') // ensures we get the newly inserted row

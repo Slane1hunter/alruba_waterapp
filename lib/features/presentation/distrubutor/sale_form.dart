@@ -1,27 +1,22 @@
+import 'package:alruba_waterapp/features/presentation/distrubutor/sales/widgets/customer_location_field.dart';
+import 'package:alruba_waterapp/features/presentation/distrubutor/sales/widgets/payment_section.dart';
+import 'package:alruba_waterapp/features/presentation/distrubutor/sales/widgets/pricing_section.dart';
+import 'package:alruba_waterapp/features/presentation/distrubutor/sales/widgets/product_dropdown.dart';
+import 'package:alruba_waterapp/features/presentation/distrubutor/sales/widgets/sale_form_submit_button.dart';
 import 'package:alruba_waterapp/models/customer.dart';
 import 'package:alruba_waterapp/models/offline_gallon_transaction.dart';
+import 'package:alruba_waterapp/models/offline_sale.dart';
+import 'package:alruba_waterapp/models/product.dart';
+import 'package:alruba_waterapp/providers/customers_provider.dart';
+import 'package:alruba_waterapp/providers/location_provider.dart';
+import 'package:alruba_waterapp/providers/products_provider.dart';
 import 'package:alruba_waterapp/services/offline_gallon_queue.dart';
+import 'package:alruba_waterapp/services/offline_sales_queue.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../../../models/offline_sale.dart';
-import '../../../../../services/offline_sales_queue.dart';
-
-// Providers
-import 'package:alruba_waterapp/providers/customers_provider.dart';
-import 'package:alruba_waterapp/providers/products_provider.dart';
-import 'package:alruba_waterapp/providers/location_provider.dart';
-
-// Custom widgets
-import 'widgets/customer_location_field.dart';
-import 'widgets/product_dropdown.dart';
-import 'widgets/pricing_section.dart';
-import 'widgets/payment_section.dart';
-import 'widgets/sale_form_submit_button.dart';
-
-import 'package:alruba_waterapp/models/product.dart';
 
 class MakeSalePage extends ConsumerStatefulWidget {
   const MakeSalePage({super.key});
@@ -40,11 +35,11 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
   String? _existingCustomerId;
   String? _existingCustomerName;
   String? _existingCustomerPhone;
-  String? _newCustomerName; // If new, name typed
+  String? _newCustomerName;
   String? _newCustomerPhone;
   String? _newCustomerType; // 'distributor' or 'regular'
   String? _newCustomerLocation; // location ID from dropdown
-  String? _preciseLocation; // used for storing location from ExactLocationWidget
+  String? _preciseLocation; // from ExactLocationWidget
 
   final List<String> _placeholderTypes = ['distributor', 'regular'];
 
@@ -62,12 +57,9 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
   // Payment
   // ----------------------------
   String _paymentStatus = 'Paid';
-  final List<String> _paymentOptions = ['Paid', 'Unpaid'];
-  final TextEditingController _notesController = TextEditingController();
+  List<String> _paymentOptions = ['Paid', 'Unpaid'];
+  // NOTE: _notesController removed as it's not used in the database
 
-  // ----------------------------
-  // Lifecycle
-  // ----------------------------
   @override
   void initState() {
     super.initState();
@@ -79,14 +71,10 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
   void dispose() {
     _priceController.dispose();
     _quantityController.dispose();
-    _notesController.dispose();
     super.dispose();
   }
 
-  // ----------------------------
-  // Logic
-  // ----------------------------
-  /// Recompute total price
+  /// Recompute total price based on price and quantity inputs.
   void _updateTotalPrice() {
     final price = double.tryParse(_priceController.text) ?? 0.0;
     final qty = int.tryParse(_quantityController.text) ?? 0;
@@ -95,7 +83,8 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
     });
   }
 
-  /// Auto-fill price based on user type & product
+  /// Auto-fill price based on selected product and customer type.
+  /// Also updates payment options if product is refillable.
   void _autoFillPrice() {
     if (_selectedProduct == null) return;
     bool isDistributor = false;
@@ -107,27 +96,46 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
       // For existing customers, assume 'regular'
       isDistributor = false;
     }
-
     final price = isDistributor
         ? _selectedProduct!.marketPrice
         : _selectedProduct!.homePrice;
-
     _priceController.text = price.toStringAsFixed(2);
     _updateTotalPrice();
+
+    // Add "Deposit" option if product is refillable.
+    if (_selectedProduct!.isRefillable) {
+      _paymentOptions = ['Paid', 'Unpaid', 'Deposit'];
+    } else {
+      _paymentOptions = ['Paid', 'Unpaid'];
+    }
+    if (!_paymentOptions.contains(_paymentStatus)) {
+      setState(() {
+        _paymentStatus = _paymentOptions.first;
+      });
+    }
   }
 
   String _defaultLocationId() {
-    // Replace with an actual valid location id if needed
+    // Replace with an actual valid location id if needed.
     return '17c1cb39-7b97-494b-be85-bae7290cd54c';
   }
 
-  /// Save sale offline with product/customer details
+  /// Save sale offline with product and customer details.
   Future<void> _submitFormOffline() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Ensure that if not creating a new customer, one is selected.
+    if (!_isNewCustomer && (_existingCustomerId == null || _existingCustomerId!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select an existing customer.')),
+      );
+      return;
+    }
+
     _formKey.currentState!.save();
 
     String? customerId;
-    // For new customers, store them offline
+    // For new customers, store them offline.
     if (_isNewCustomer) {
       final newLocalCustomer = Customer(
         name: _newCustomerName ?? "Unknown Customer",
@@ -139,18 +147,13 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
 
       final customerBox = await Hive.openBox<Customer>('offline_customers');
       await customerBox.add(newLocalCustomer);
-
-      // Sync logic will create them in Supabase
       customerId = null;
     } else {
-      // For existing
       customerId = _existingCustomerId;
     }
 
-    final phoneToStore =
-        _isNewCustomer ? _newCustomerPhone : _existingCustomerPhone;
-    final saleCustomerName =
-        _isNewCustomer ? _newCustomerName : _existingCustomerName;
+    final phoneToStore = _isNewCustomer ? _newCustomerPhone : _existingCustomerPhone;
+    final saleCustomerName = _isNewCustomer ? _newCustomerName : _existingCustomerName;
     final qty = int.tryParse(_quantityController.text) ?? 0;
     final price = double.tryParse(_priceController.text) ?? 0.0;
 
@@ -165,10 +168,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
       pricePerUnit: price,
       quantity: qty,
       totalPrice: _totalPrice,
-      paymentStatus: _paymentStatus,
-      notes: _paymentStatus == 'Unpaid' && _notesController.text.isNotEmpty
-          ? _notesController.text
-          : null,
+      paymentStatus: _paymentStatus, // 'Paid', 'Unpaid', or 'Deposit'
       createdAt: DateTime.now(),
       soldBy: Supabase.instance.client.auth.currentUser?.id ?? 'unknown',
       locationId: _newCustomerLocation ?? _defaultLocationId(),
@@ -178,35 +178,30 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
     debugPrint("[MakeSalePage] OfflineSale: $offlineSale");
     await OfflineSalesQueue.addSale(offlineSale);
 
-    final queuedSales = await OfflineSalesQueue.getAllSales();
-    debugPrint(
-        "[MakeSalePage] Total unsynced sales in queue: ${queuedSales.length}");
-// 2) If product is refillable, also record container movement
-  if (_selectedProduct != null && _selectedProduct!.isRefillable) {
-    final containerTx = OfflineGallonTransaction(
-      customerId: customerId ?? 'unknown',
-      productId: _selectedProduct!.id,
-      quantity: qty, // if it's a deposit or purchase, +qty. A return would be -qty
-      transactionType: 'purchase', // or 'deposit', etc
-      status: _paymentStatus,       // 'paid', 'unpaid'
-      createdAt: DateTime.now(),
-    );
-    await OfflineGallonQueue.addTransaction(containerTx);
-  }
+    // If product is refillable, also record container movement.
+    if (_selectedProduct != null && _selectedProduct!.isRefillable) {
+      final containerTx = OfflineGallonTransaction(
+        customerId: customerId ?? 'unknown',
+        productId: _selectedProduct!.id,
+        quantity: qty,
+        transactionType: _paymentStatus.toLowerCase() == 'deposit' ? 'deposit' : 'purchase',
+        status: _paymentStatus.toLowerCase(),
+        createdAt: DateTime.now(),
+      );
+      await OfflineGallonQueue.addTransaction(containerTx);
+    }
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Sale queued for sync!')),
     );
   }
 
-  // ----------------------------
-  // UI
-  // ----------------------------
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final customersAsync = ref.watch(customersProvider);
-    final productsAsync = ref.watch(productsProvider);
+    ref.watch(productsProvider);
     final locationsAsync = ref.watch(locationsProvider);
 
     return Scaffold(
@@ -225,25 +220,21 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
               // --------------------------------
               Card(
                 elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 margin: const EdgeInsets.only(bottom: 16),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Switch between new/existing
+                      // Switch between New/Existing Customer
                       Row(
                         children: [
                           const Icon(Icons.person_outline, size: 20),
                           const SizedBox(width: 8),
                           Text(
                             'Customer Info',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           const Spacer(),
                           Text(_isNewCustomer ? 'New' : 'Existing'),
@@ -265,13 +256,10 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                         ],
                       ),
                       const SizedBox(height: 16),
-
-                      // If NOT new customer, show a styled button
+                      // Existing Customer Section (Required Selection)
                       if (!_isNewCustomer)
                         customersAsync.when(
-                          loading: () => const Center(
-                            child: CircularProgressIndicator(),
-                          ),
+                          loading: () => const Center(child: CircularProgressIndicator()),
                           error: (err, st) => Text('Error: $err'),
                           data: (customerList) {
                             final mapped = customerList.map((c) {
@@ -281,22 +269,17 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                                 'phone': c['phone'].toString(),
                               };
                             }).toList();
-
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 ElevatedButton.icon(
                                   icon: const Icon(Icons.people_alt),
-                                  label: Text(_existingCustomerName ??
-                                      'Select Existing Customer'),
+                                  label: Text(_existingCustomerName ?? 'Select Existing Customer'),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.blue[500],
                                     foregroundColor: Colors.white,
                                     minimumSize: const Size.fromHeight(48),
-                                    textStyle: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       side: const BorderSide(color: Colors.grey),
@@ -304,38 +287,29 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                                     elevation: 2,
                                   ),
                                   onPressed: () async {
-                                    final chosen = await showModalBottomSheet<
-                                        Map<String, String>>(
+                                    final chosen = await showModalBottomSheet<Map<String, String>>(
                                       context: context,
                                       isScrollControlled: true,
                                       backgroundColor: Colors.transparent,
-                                      builder: (ctx) => _CustomerSearchSheet(
-                                          customers: mapped),
+                                      builder: (ctx) => _CustomerSearchSheet(customers: mapped),
                                     );
                                     if (chosen != null) {
                                       setState(() {
                                         _existingCustomerId = chosen['id'];
                                         _existingCustomerName = chosen['name'];
-                                        _existingCustomerPhone =
-                                            chosen['phone'];
+                                        _existingCustomerPhone = chosen['phone'];
                                       });
                                     }
                                   },
                                 ),
-
                                 const SizedBox(height: 8),
-
                                 if (_existingCustomerId != null)
                                   Container(
                                     decoration: BoxDecoration(
-                                      color: theme
-                                          .colorScheme.surfaceContainerHighest,
+                                      color: theme.colorScheme.surfaceContainerHighest,
                                       borderRadius: BorderRadius.circular(8),
                                     ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -343,10 +317,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                                         const SizedBox(width: 8),
                                         Text(
                                           '$_existingCustomerName',
-                                          style: theme.textTheme.bodyMedium
-                                              ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
+                                          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                                         ),
                                         const SizedBox(width: 8),
                                         Text(
@@ -360,8 +331,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                             );
                           },
                         ),
-
-                      // If NEW customer
+                      // New Customer Section
                       if (_isNewCustomer) ...[
                         TextFormField(
                           decoration: const InputDecoration(
@@ -380,8 +350,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                           ),
                           keyboardType: TextInputType.phone,
                           onSaved: (val) => _newCustomerPhone = val,
-                          validator: (val) =>
-                              val == null || val.isEmpty ? 'Enter phone' : null,
+                          validator: (val) => val == null || val.isEmpty ? 'Enter phone' : null,
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<String>(
@@ -402,14 +371,11 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                               _autoFillPrice();
                             });
                           },
-                          validator: (val) =>
-                              val == null ? 'Please select a type' : null,
+                          validator: (val) => val == null ? 'Please select a type' : null,
                         ),
                         const SizedBox(height: 16),
                         locationsAsync.when(
-                          loading: () => const Center(
-                            child: CircularProgressIndicator(),
-                          ),
+                          loading: () => const Center(child: CircularProgressIndicator()),
                           error: (err, st) => Text('Error: $err'),
                           data: (locList) {
                             final mappedLocs = locList.map((loc) {
@@ -418,14 +384,10 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                                 'name': loc.name.toString(),
                               };
                             }).toList();
-
                             return CustomerLocationDropdown(
                               selectedLocation: _newCustomerLocation,
-                              onLocationChanged: (val) =>
-                                  setState(() => _newCustomerLocation = val),
-                              locations: List<Map<String, String>>.from(
-                                mappedLocs,
-                              ),
+                              onLocationChanged: (val) => setState(() => _newCustomerLocation = val),
+                              locations: List<Map<String, String>>.from(mappedLocs),
                             );
                           },
                         ),
@@ -442,15 +404,12 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                   ),
                 ),
               ),
-
               // --------------------------------
               // Product & Pricing Card
               // --------------------------------
               Card(
                 elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 margin: const EdgeInsets.only(bottom: 16),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -463,56 +422,49 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                           const SizedBox(width: 8),
                           Text(
                             'Product & Pricing',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
                       const SizedBox(height: 16),
                       ref.watch(productsProvider).when(
-                            loading: () => const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                            error: (err, st) => Text('Product Error: $err'),
-                            data: (prodList) {
-                              final typed = prodList as List<Product>;
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  ProductDropdown(
-                                    selectedProduct: _selectedProduct,
-                                    onProductChanged: (prod) {
-                                      setState(() {
-                                        _selectedProduct = prod;
-                                        _autoFillPrice();
-                                      });
-                                    },
-                                    products: typed,
-                                  ),
-                                  const SizedBox(height: 24),
-                                  PricingSection(
-                                    priceController: _priceController,
-                                    quantityController: _quantityController,
-                                    totalPrice: _totalPrice,
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
+                        loading: () => const Center(child: CircularProgressIndicator()),
+                        error: (err, st) => Text('Product Error: $err'),
+                        data: (prodList) {
+                          final typed = prodList as List<Product>;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ProductDropdown(
+                                selectedProduct: _selectedProduct,
+                                onProductChanged: (prod) {
+                                  setState(() {
+                                    _selectedProduct = prod;
+                                    _autoFillPrice();
+                                  });
+                                },
+                                products: typed,
+                              ),
+                              const SizedBox(height: 24),
+                              PricingSection(
+                                priceController: _priceController,
+                                quantityController: _quantityController,
+                                totalPrice: _totalPrice,
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
               ),
-
               // --------------------------------
               // Payment Card
               // --------------------------------
               Card(
                 elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 margin: const EdgeInsets.only(bottom: 16),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -525,37 +477,20 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                           const SizedBox(width: 8),
                           Text(
                             'Payment Details',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
                       const SizedBox(height: 16),
                       PaymentSection(
                         paymentStatus: _paymentStatus,
-                        onPaymentStatusChanged: (val) =>
-                            setState(() => _paymentStatus = val ?? 'Paid'),
+                        onPaymentStatusChanged: (val) => setState(() => _paymentStatus = val ?? 'Paid'),
                         paymentOptions: _paymentOptions,
-                        notesController: _notesController,
                       ),
-                      if (_paymentStatus == 'Unpaid') ...[
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _notesController,
-                          maxLines: 2,
-                          decoration: const InputDecoration(
-                            labelText: 'Reason / Notes',
-                            hintText: 'Why is payment pending?',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
               ),
-
               // --------------------------------
               // Submit Button
               // --------------------------------
@@ -571,12 +506,11 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
 }
 
 // ---------------------------------------------------------------
-// This is a stylish bottom sheet with DraggableScrollableSheet
+// Bottom Sheet for Customer Search
 // ---------------------------------------------------------------
 class _CustomerSearchSheet extends StatefulWidget {
   final List<Map<String, String>> customers;
-  const _CustomerSearchSheet({Key? key, required this.customers})
-      : super(key: key);
+  const _CustomerSearchSheet({Key? key, required this.customers}) : super(key: key);
 
   @override
   State<_CustomerSearchSheet> createState() => _CustomerSearchSheetState();
@@ -608,11 +542,10 @@ class _CustomerSearchSheetState extends State<_CustomerSearchSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return DraggableScrollableSheet(
-      initialChildSize: 0.5, // half screen
-      minChildSize: 0.3, // can’t go smaller than 30%
-      maxChildSize: 0.9, // can drag up to 90% of screen
+      initialChildSize: 0.5,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
       builder: (context, scrollController) {
         return Container(
           decoration: BoxDecoration(
@@ -636,9 +569,7 @@ class _CustomerSearchSheetState extends State<_CustomerSearchSheet> {
               const SizedBox(height: 12),
               Text(
                 'Select a Customer',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               Padding(

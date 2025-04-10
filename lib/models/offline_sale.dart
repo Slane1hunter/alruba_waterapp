@@ -35,21 +35,18 @@ class OfflineSale extends HiveObject {
   String paymentStatus;
 
   @HiveField(10)
-  String? notes;
-
-  @HiveField(11)
   DateTime createdAt;
 
-  @HiveField(12)
+  @HiveField(11)
   String? customerPhone;
 
-  @HiveField(13)
+  @HiveField(12)
   String soldBy;
 
-  @HiveField(14)
+  @HiveField(13)
   String locationId;
 
-  @HiveField(15)
+  @HiveField(14)
   String? preciseLocation;
 
   OfflineSale({
@@ -63,7 +60,6 @@ class OfflineSale extends HiveObject {
     required this.quantity,
     required this.totalPrice,
     required this.paymentStatus,
-    this.notes,
     required this.createdAt,
     this.customerPhone,
     required this.soldBy,

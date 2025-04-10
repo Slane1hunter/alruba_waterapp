@@ -125,12 +125,6 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                     Text(sale.paymentStatus),
                   ],
                 ),
-                if (sale.notes != null && sale.notes!.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  const Text('Notes:',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text(sale.notes!),
-                ],
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -230,13 +224,7 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
             ),
           ),
           // Unsynced sale count header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Text(
-              'Unsynced Sales: $unsyncedSalesCount',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-            ),
-          ),
+      
           // List of unsynced sales
           Expanded(
             child: ValueListenableBuilder<Box<OfflineSale>>(

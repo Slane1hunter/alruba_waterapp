@@ -1,4 +1,5 @@
 import 'package:alruba_waterapp/features/presentation/distrubutor/distrubutor_profile_page.dart';
+import 'package:alruba_waterapp/features/presentation/distrubutor/sale_form.dart';
 import 'package:alruba_waterapp/features/presentation/distrubutor/sales/widgets/distributor_sales_page.dart';
 import 'package:alruba_waterapp/features/presentation/distrubutor/sales/widgets/sales_queue_page.dart';
 import 'package:flutter/material.dart';
@@ -6,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:alruba_waterapp/services/supabase_service.dart';
 
 // Import your sales pages
-import 'package:alruba_waterapp/features/auth/presentation/distrubutor/sales/sale_form.dart';
 
 class DistributorHomePage extends ConsumerStatefulWidget {
   const DistributorHomePage({super.key});
@@ -111,7 +111,7 @@ class _DistributorHomePageState extends ConsumerState<DistributorHomePage> {
     if (response == null) {
       throw Exception("Update failed: No response returned.");
     }
-    if (response is Map<String, dynamic> && response.containsKey('error') && response['error'] != null) {
+    if (response.containsKey('error') && response['error'] != null) {
       throw Exception(response['error']['message']);
     }
   }
@@ -194,8 +194,8 @@ class _DistributorHomePageState extends ConsumerState<DistributorHomePage> {
             });
           });
         },
-        child: const Icon(Icons.add, size: 32),
         backgroundColor: Colors.blueAccent,
+        child: const Icon(Icons.add, size: 32),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: BottomAppBar(
