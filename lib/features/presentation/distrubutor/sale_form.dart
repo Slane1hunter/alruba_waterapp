@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 
 class MakeSalePage extends ConsumerStatefulWidget {
@@ -156,6 +157,8 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
     final saleCustomerName = _isNewCustomer ? _newCustomerName : _existingCustomerName;
     final qty = int.tryParse(_quantityController.text) ?? 0;
     final price = double.tryParse(_priceController.text) ?? 0.0;
+    final String saleId = const Uuid().v4(); // <- requires uuid package
+
 
     final offlineSale = OfflineSale(
       isNewCustomer: _isNewCustomer,
@@ -173,23 +176,29 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
       soldBy: Supabase.instance.client.auth.currentUser?.id ?? 'unknown',
       locationId: _newCustomerLocation ?? _defaultLocationId(),
       preciseLocation: _preciseLocation,
+      id: saleId,
     );
 
     debugPrint("[MakeSalePage] OfflineSale: $offlineSale");
     await OfflineSalesQueue.addSale(offlineSale);
 
     // If product is refillable, also record container movement.
-    if (_selectedProduct != null && _selectedProduct!.isRefillable) {
-      final containerTx = OfflineGallonTransaction(
-        customerId: customerId ?? 'unknown',
-        productId: _selectedProduct!.id,
-        quantity: qty,
-        transactionType: _paymentStatus.toLowerCase() == 'deposit' ? 'deposit' : 'purchase',
-        status: _paymentStatus.toLowerCase(),
-        createdAt: DateTime.now(),
-      );
-      await OfflineGallonQueue.addTransaction(containerTx);
-    }
+    // In sale_form.dart, inside _submitFormOffline()
+
+if (_selectedProduct != null && _selectedProduct!.isRefillable) {
+  final containerTx = OfflineGallonTransaction(
+    customerId: customerId ?? 'unknown',
+    productId: _selectedProduct!.id,
+    quantity: qty,
+    transactionType: _paymentStatus.toLowerCase() == 'deposit' ? 'deposit' : 'purchase',
+    status: _paymentStatus.toLowerCase(),
+    amount: _totalPrice,
+    createdAt: DateTime.now(),
+      saleId: saleId, // 🔹 Attach it here
+  );
+  await OfflineGallonQueue.addTransaction(containerTx);
+}
+
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -431,7 +440,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                         loading: () => const Center(child: CircularProgressIndicator()),
                         error: (err, st) => Text('Product Error: $err'),
                         data: (prodList) {
-                          final typed = prodList as List<Product>;
+                          final typed = prodList;
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -510,7 +519,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
 // ---------------------------------------------------------------
 class _CustomerSearchSheet extends StatefulWidget {
   final List<Map<String, String>> customers;
-  const _CustomerSearchSheet({Key? key, required this.customers}) : super(key: key);
+  const _CustomerSearchSheet({required this.customers});
 
   @override
   State<_CustomerSearchSheet> createState() => _CustomerSearchSheetState();

@@ -1,7 +1,7 @@
 
 import 'package:alruba_waterapp/features/presentation/logout_button.dart';
 import 'package:alruba_waterapp/features/presentation/owner/locations/location_list.dart';
-import 'package:alruba_waterapp/features/presentation/owner/products/products_list.dart';
+import 'package:alruba_waterapp/features/presentation/owner/owner_management_page.dart';
 import 'package:alruba_waterapp/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,7 +16,7 @@ class OwnerHomePage extends ConsumerStatefulWidget {
 class _OwnerHomePageState extends ConsumerState<OwnerHomePage> {
   int _currentIndex = 0;
   final List<Widget> _pages = const [
-    ProductListPage(),
+    OwnerManagementPage(),
     LocationListPage(),
   ];
 

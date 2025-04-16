@@ -24,13 +24,15 @@ class OfflineGallonTransactionAdapter
       transactionType: fields[3] as String,
       status: fields[4] as String?,
       createdAt: fields[5] as DateTime,
+      amount: fields[6] as double,
+      saleId: fields[7] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, OfflineGallonTransaction obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.customerId)
       ..writeByte(1)
@@ -42,7 +44,11 @@ class OfflineGallonTransactionAdapter
       ..writeByte(4)
       ..write(obj.status)
       ..writeByte(5)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(6)
+      ..write(obj.amount)
+      ..writeByte(7)
+      ..write(obj.saleId);
   }
 
   @override

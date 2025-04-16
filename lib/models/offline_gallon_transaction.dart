@@ -2,7 +2,7 @@ import 'package:hive/hive.dart';
 
 part 'offline_gallon_transaction.g.dart';
 
-@HiveType(typeId: 5) // pick a unique typeId
+@HiveType(typeId: 5)
 class OfflineGallonTransaction extends HiveObject {
   @HiveField(0)
   String? customerId;
@@ -11,16 +11,22 @@ class OfflineGallonTransaction extends HiveObject {
   String? productId;
 
   @HiveField(2)
-  int quantity; // + for deposit/purchase, - for return
+  int quantity;
 
   @HiveField(3)
-  String transactionType; // 'deposit', 'return', 'purchase', etc.
+  String transactionType;
 
   @HiveField(4)
-  String? status; // 'paid', 'unpaid', 'deposit' etc.
+  String? status;
 
   @HiveField(5)
   DateTime createdAt;
+
+  @HiveField(6)
+  double amount;
+
+  @HiveField(7) // 🔹 NEW FIELD
+  String? saleId;
 
   OfflineGallonTransaction({
     this.customerId,
@@ -29,5 +35,7 @@ class OfflineGallonTransaction extends HiveObject {
     required this.transactionType,
     this.status,
     required this.createdAt,
+    required this.amount,
+    this.saleId,
   });
 }

@@ -6,11 +6,11 @@ class PaymentSection extends StatelessWidget {
   final List<String> paymentOptions;
 
   const PaymentSection({
-    Key? key,
+    super.key,
     required this.paymentStatus,
     required this.onPaymentStatusChanged,
     required this.paymentOptions,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

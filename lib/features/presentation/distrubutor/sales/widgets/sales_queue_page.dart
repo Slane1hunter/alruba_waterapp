@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:alruba_waterapp/models/offline_sale.dart';
-import 'package:alruba_waterapp/providers/customers_provider.dart';
 import 'package:alruba_waterapp/services/offline_sync_service.dart';
 
 class SalesQueuePage extends ConsumerStatefulWidget {
@@ -24,9 +23,6 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
     try {
       // 1) Sync offline data (including customer, sale, and gallon transactions)
       await OfflineSyncService().syncOfflineData();
-
-      // 2) Refresh customers if needed
-      ref.refresh(customersProvider);
 
       // 3) Clear the offline sales box
       final salesBox = Hive.box<OfflineSale>('offline_sales');
@@ -150,8 +146,6 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
   @override
   Widget build(BuildContext context) {
     // Read unsynced sale count from Hive box
-    final unsyncedSalesCount = Hive.box<OfflineSale>('offline_sales').length;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text("Today's Sales Queue"),

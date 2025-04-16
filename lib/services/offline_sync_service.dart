@@ -15,10 +15,6 @@ class OfflineSyncService {
 
   final SupabaseClient client = Supabase.instance.client;
 
-  String _defaultLocationId() {
-    // Replace with a valid location ID from your DB if needed.
-    return '17c1cb39-7b97-494b-be85-bae7290cd54c';
-  }
 
   Future<void> syncOfflineData() async {
     debugPrint("[OfflineSyncService] Starting syncOfflineData");
@@ -142,29 +138,31 @@ class OfflineSyncService {
           }
         }
 
-        debugPrint("[OfflineSyncService] Inserting sale with "
-            "customer_id: ${offSale.existingCustomerId}, "
-            "product_id: ${offSale.productId}, quantity: ${offSale.quantity}, "
-            "price_per_unit: ${offSale.pricePerUnit}, payment_status: ${offSale.paymentStatus.toLowerCase()}, "
-            "sold_by: ${offSale.soldBy ?? client.auth.currentUser?.id}, "
-            "location_id: ${offSale.locationId ?? _defaultLocationId()}, "
-            "created_at: ${offSale.createdAt.toIso8601String()}");
+        // debugPrint("[OfflineSyncService] Inserting sale with "
+        //     "customer_id: ${offSale.existingCustomerId}, "
+        //     "product_id: ${offSale.productId}, quantity: ${offSale.quantity}, "
+        //     "price_per_unit: ${offSale.pricePerUnit}, payment_status: ${offSale.paymentStatus.toLowerCase()}, "
+        //     "sold_by: ${offSale.soldBy ?? client.auth.currentUser?.id}, "
+        //     "location_id: ${offSale.locationId ?? _defaultLocationId()}, "
+        //     "created_at: ${offSale.createdAt.toIso8601String()}");
 
         // CHANGED: add .select('*') to ensure we get a non-empty response
         final saleInserted = await client
-            .from('sales')
-            .insert({
-              'customer_id': offSale.existingCustomerId,
-              'product_id': offSale.productId,
-              'quantity': offSale.quantity,
-              'price_per_unit': offSale.pricePerUnit,
-              'payment_status': offSale.paymentStatus.toLowerCase(),
-              'sold_by': offSale.soldBy,
-              'location_id': offSale.locationId,
-              'created_at': offSale.createdAt.toIso8601String(),
-            })
-            .select('*') // ensures we get the newly inserted row
-            .maybeSingle();
+    .from('sales')
+    .insert({
+      'id': offSale.id, // ✅ manually assigning the offline-generated UUID
+      'customer_id': offSale.existingCustomerId,
+      'product_id': offSale.productId,
+      'quantity': offSale.quantity,
+      'price_per_unit': offSale.pricePerUnit,
+      'payment_status': offSale.paymentStatus.toLowerCase(),
+      'sold_by': offSale.soldBy,
+      'location_id': offSale.locationId,
+      'created_at': offSale.createdAt.toIso8601String(),
+    })
+    .select('*')
+    .maybeSingle();
+
 
         if (saleInserted != null && saleInserted.isNotEmpty) {
           debugPrint(
@@ -183,49 +181,63 @@ class OfflineSyncService {
   // ------------------------------------------------
   // Step 3: Sync container transactions
   // ------------------------------------------------
- Future<void> _syncGallonTransactions() async {
-  try {
-    final containerBox = await Hive.openBox<OfflineGallonTransaction>('offline_gallon_transactions');
+  Future<void> _syncGallonTransactions() async {
+    try {
+      // DELETE THE EXISTING BOX COMPLETELY BEFORE OPENING
+      // await Hive.deleteBoxFromDisk('offline_gallon_transactions');
 
-    for (final key in containerBox.keys) {
-      final tx = containerBox.get(key);
-      if (tx == null) continue;
+      // Now safely reopen the box (it will create a fresh new empty box)
+      final containerBox = await Hive.openBox<OfflineGallonTransaction>(
+          'offline_gallon_transactions');
 
-      // 1) check for valid customer
-      if (tx.customerId == null || tx.customerId!.isEmpty || tx.customerId == 'unknown') {
-        debugPrint("[OfflineSyncService] Container TX has invalid customer. Skipping...");
-        // Possibly do containerBox.delete(key) or continue
-        continue;
-      }
+      // Since we have deleted the box from disk, it is empty now
+      // You don't need containerBox.clear() here anymore, remove that line
 
-      debugPrint("[OfflineSyncService] Syncing container tx: $tx");
-      try {
-        final inserted = await client
-            .from('gallon_transactions')
-            .insert({
-              'customer_id': tx.customerId,
-              'product_id': tx.productId,
-              'quantity': tx.quantity,
-              'transaction_type': tx.transactionType,
-              'status': tx.status,
-              'created_at': tx.createdAt.toIso8601String(),
-            })
-            .select('*')
-            .maybeSingle();
+      // No old records, you can safely continue with the sync logic
+      for (final key in containerBox.keys) {
+        final tx = containerBox.get(key);
+        if (tx == null) continue;
 
-        if (inserted != null && inserted.isNotEmpty) {
-          debugPrint("[OfflineSyncService] container tx inserted: ${inserted['id']}");
-          await containerBox.delete(key); 
-        } else {
-          debugPrint("[OfflineSyncService] container tx insert returned empty");
+        if (tx.customerId == null ||
+            tx.customerId!.isEmpty ||
+            tx.customerId == 'unknown') {
+          debugPrint(
+              "[OfflineSyncService] Container TX has invalid customer. Skipping...");
+          continue;
         }
-      } catch (e) {
-        debugPrint("[OfflineSyncService] Error syncing container tx: $e");
-      }
-    }
-  } catch (e) {
-    debugPrint("[OfflineSyncService] Could not open offline_gallon_transactions box: $e");
-  }
-}
 
+        debugPrint("[OfflineSyncService] Syncing container tx: $tx");
+        try {
+          final inserted = await client
+              .from('gallon_transactions')
+              .insert({
+                'customer_id': tx.customerId,
+                'product_id': tx.productId,
+                'quantity': tx.quantity,
+                'transaction_type': tx.transactionType,
+                'status': tx.status,
+                'amount': tx.amount,
+                'sale_id': tx.saleId,
+                'created_at': tx.createdAt.toIso8601String(),
+              })
+              .select('*')
+              .maybeSingle();
+
+          if (inserted != null && inserted.isNotEmpty) {
+            debugPrint(
+                "[OfflineSyncService] Container TX inserted: ${inserted['id']}");
+            await containerBox.delete(key);
+          } else {
+            debugPrint(
+                "[OfflineSyncService] Container TX insert returned empty");
+          }
+        } catch (e) {
+          debugPrint("[OfflineSyncService] Error syncing container TX: $e");
+        }
+      }
+    } catch (e) {
+      debugPrint(
+          "[OfflineSyncService] Could not open offline_gallon_transactions box: $e");
+    }
+  }
 }

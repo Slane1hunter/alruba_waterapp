@@ -8,8 +8,7 @@ class ManagerDashboardPage extends ConsumerStatefulWidget {
   const ManagerDashboardPage({super.key});
 
   @override
-  ConsumerState<ManagerDashboardPage> createState() =>
-      _ManagerDashboardPageState();
+  ConsumerState<ManagerDashboardPage> createState() => _ManagerDashboardPageState();
 }
 
 class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
@@ -17,41 +16,65 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
   DateTime? _endDate;
   String _searchText = '';
   String? _locationFilter;
+  String? _soldByFilter;
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
-    // Default to "today" as the initial range.
+    // Default date range: today (from midnight to 23:59)
     _startDate = DateTime(now.year, now.month, now.day, 0, 0);
     _endDate = DateTime(now.year, now.month, now.day, 23, 59);
   }
 
-  /// Returns the select columns for the view without extra query parameters.
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Manager Dashboard'),
+        centerTitle: true,
+        elevation: 4,
+        backgroundColor: theme.colorScheme.primary,
+      ),
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) {
+          return [
+            // The filter section will scroll away when the list is scrolled.
+            SliverToBoxAdapter(
+              child: _buildFilterSection(theme),
+            ),
+            // Extra spacing
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          ];
+        },
+        body: _buildSalesList(theme),
+      ),
+    );
+  }
+
+  /// Returns the select columns for the view.
   String _buildSelectColumns() {
     return 'id, quantity, price_per_unit, total_amount, payment_status, created_at, '
            'location:locations!sales_location_id_fkey(name), '
            'customer:customers!fk_sales_customer(name), '
            'product:products!sales_product_id_fkey(name), '
-           'sold_by_first_name, sold_by_last_name';
+           'sold_by, sold_by_first_name, sold_by_last_name';
   }
 
-  /// Fetch sales data from the view 'sales_with_profiles'
-  /// Apply ordering by created_at and then filter on date client-side.
+  /// Fetch sales data from the 'sales_with_profiles' view.
   Future<List<Map<String, dynamic>>> _fetchSalesData() async {
     final columns = _buildSelectColumns();
     debugPrint('[DEBUG] Selecting columns: $columns');
-
     try {
       final result = await SupabaseService.client
           .from('sales_with_profiles')
           .select(columns)
           .order('created_at', ascending: false);
-      debugPrint('[DEBUG] raw sales => $result');
-
+     // debugPrint('[DEBUG] raw sales => $result');
       var sales = List<Map<String, dynamic>>.from(result);
 
-      // Apply client-side date filtering.
+      // Client-side date filtering.
       if (_startDate != null || _endDate != null) {
         sales = sales.where((sale) {
           final rawDate = sale['created_at'];
@@ -64,6 +87,20 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
         }).toList();
       }
 
+      // Client-side sold-by filtering.
+      if (_soldByFilter != null && _soldByFilter != 'ALL') {
+        sales = sales.where((sale) => sale['sold_by'] == _soldByFilter).toList();
+      }
+
+      // Client-side search filtering.
+      if (_searchText.isNotEmpty) {
+        sales = sales.where((sale) {
+          final cust = _parseName(sale['customer']);
+          final prod = _parseName(sale['product']);
+          return cust.toLowerCase().contains(_searchText) ||
+              prod.toLowerCase().contains(_searchText);
+        }).toList();
+      }
       return sales;
     } catch (e, st) {
       debugPrint('[DEBUG] _fetchSalesData error: $e');
@@ -93,82 +130,107 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Manager Dashboard'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => setState(() {}), // Rebuild for re-fetching data.
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        child: Column(
+  /// Build the Sold By filter widget.
+  Widget _buildSoldByFilter(ThemeData theme) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: SupabaseService.client
+          .from('profiles')
+          .select('user_id, first_name, last_name, role')
+          .inFilter('role', ['distributor', 'manager'])
+          .order('first_name')
+          .then((data) => List<Map<String, dynamic>>.from(data)),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const CircularProgressIndicator();
+        }
+        if (snapshot.hasError) {
+          debugPrint('Error fetching sellers: ${snapshot.error}');
+          return const Text('Error loading sellers');
+        }
+        final sellers = snapshot.data ?? [];
+        debugPrint('Fetched sellers: ${sellers.length}');
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            _buildFilterSection(theme),
-            _buildSalesList(theme),
+            const Text('Sold By:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 12),
+            DropdownButton<String>(
+              value: _soldByFilter ?? 'ALL',
+              items: [
+                const DropdownMenuItem(
+                  value: 'ALL',
+                  child: Text('All Sellers'),
+                ),
+                ...sellers.map((seller) {
+                  final fullName = '${seller['first_name']} ${seller['last_name']}';
+                  debugPrint('Seller ${seller['first_name']}: ${seller['role']}');
+                  return DropdownMenuItem(
+                    value: seller['user_id'],
+                    child: Text(fullName),
+                  );
+                }),
+              ],
+              onChanged: (val) => setState(() => _soldByFilter = val == 'ALL' ? null : val),
+              underline: Container(
+                height: 2,
+                color: theme.colorScheme.primary,
+              ),
+              icon: Icon(Icons.arrow_drop_down, color: theme.colorScheme.primary),
+            ),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 
-  /// Build the filter section: search, date range, and location.
+  /// Build the complete filter section.
   Widget _buildFilterSection(ThemeData theme) {
     final locationsAsync = ref.watch(locationsProvider);
     return Card(
       margin: const EdgeInsets.all(16),
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Search field.
             TextField(
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Search by customer or product',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              onChanged: (val) {
-                setState(() {
-                  _searchText = val.trim().toLowerCase();
-                });
-              },
+              onChanged: (val) => setState(() => _searchText = val.trim().toLowerCase()),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             // Date range row.
             Row(
               children: [
                 Expanded(
                   child: Text(
-                    _startDate != null && _endDate != null
-                        ? 'Date: ${DateFormat('yyyy-MM-dd').format(_startDate!)} - ${DateFormat('yyyy-MM-dd').format(_endDate!)}'
+                    (_startDate != null && _endDate != null)
+                        ? 'Date: ${DateFormat('MMM dd, yyyy').format(_startDate!)} - ${DateFormat('MMM dd, yyyy').format(_endDate!)}'
                         : 'Select date range',
-                    style: theme.textTheme.bodyMedium,
+                    style: theme.textTheme.bodyLarge,
                   ),
                 ),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.date_range),
-                  label: const Text('Pick Date'),
+                IconButton(
+                  icon: Icon(Icons.calendar_month, size: 28, color: theme.colorScheme.primary),
                   onPressed: () => _pickDateRange(context),
+                  tooltip: 'Select date range',
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            // Location filter.
+            const SizedBox(height: 20),
+            // Location filter row.
             Row(
               children: [
-                const Text(
-                  'Location:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 8),
+                const Text('Location:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 12),
                 locationsAsync.when(
                   data: (locations) {
                     final dropItems = [
@@ -189,16 +251,24 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
                           _locationFilter = (val == 'ALL') ? null : val;
                         });
                       },
+                      underline: Container(
+                        height: 2,
+                        color: theme.colorScheme.primary,
+                      ),
+                      icon: Icon(Icons.arrow_drop_down, color: theme.colorScheme.primary),
                     );
                   },
                   loading: () => const CircularProgressIndicator(),
-                  error: (err, st) {
-                    debugPrint('[DEBUG] Locations error: $err');
-                    return Text('Error: $err');
+                  error: (e, st) {
+                    debugPrint('[DEBUG] Locations error: $e');
+                    return Text('Error: $e');
                   },
                 ),
               ],
             ),
+            const SizedBox(height: 20),
+            // Sold By filter row.
+            _buildSoldByFilter(theme),
           ],
         ),
       ),
@@ -207,20 +277,18 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
 
   /// Build the sales list using data from the view.
   Widget _buildSalesList(ThemeData theme) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
+    return FutureBuilder<List<Map<String, dynamic>>>( 
       future: _fetchSalesData(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          debugPrint('[DEBUG] Sales list error: ${snapshot.error}');
           return Center(child: Text('Error: ${snapshot.error}'));
         }
-
         var salesData = snapshot.data ?? [];
 
-        // Apply client-side location filter.
+        // Apply client-side location filtering.
         if (_locationFilter != null && _locationFilter != 'ALL') {
           salesData = salesData.where((sale) {
             final loc = sale['location'];
@@ -237,7 +305,7 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
             final cust = _parseName(sale['customer']);
             final prod = _parseName(sale['product']);
             return cust.toLowerCase().contains(_searchText) ||
-                prod.toLowerCase().contains(_searchText);
+                   prod.toLowerCase().contains(_searchText);
           }).toList();
         }
 
@@ -246,7 +314,7 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
         }
 
         // Group sales by date.
-        final grouped = <String, List<Map<String, dynamic>>>{};
+        final Map<String, List<Map<String, dynamic>>> grouped = {};
         for (final sale in salesData) {
           final raw = sale['created_at'] ?? '';
           final dt = DateTime.tryParse(raw.toString()) ?? DateTime.now();
@@ -256,104 +324,33 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
         final sortedKeys = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
 
         return ListView.builder(
+          padding: const EdgeInsets.only(bottom: 16),
           shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(),
           itemCount: sortedKeys.length,
           itemBuilder: (ctx, idx) {
             final dateKey = sortedKeys[idx];
-            final daySales = grouped[dateKey] ?? [];
+            final daySales = grouped[dateKey]!;
             double dailyTotal = 0.0;
             for (final s in daySales) {
               final tot = num.tryParse(s['total_amount']?.toString() ?? '') ?? 0.0;
               dailyTotal += tot;
             }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text(
-                    '$dateKey  |  Day Total: \$${dailyTotal.toStringAsFixed(2)}',
-                    style: theme.textTheme.titleLarge,
-                  ),
+            return Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              elevation: 6,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ExpansionTile(
+                iconColor: theme.colorScheme.primary,
+                collapsedIconColor: theme.colorScheme.onSurface,
+                title: Text(
+                  '$dateKey  |  Day Total: \$${dailyTotal.toStringAsFixed(2)}',
+                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: daySales.length,
-                  itemBuilder: (ctx2, sdx) {
-                    final sale = daySales[sdx];
-                    final custName = _parseName(sale['customer']);
-                    final prodName = _parseName(sale['product']);
-                    final locName  = _parseName(sale['location']);
-                    final qty = num.tryParse(sale['quantity']?.toString() ?? '') ?? 0;
-                    final ppu = num.tryParse(sale['price_per_unit']?.toString() ?? '') ?? 0;
-                    final totPrice = num.tryParse(sale['total_amount']?.toString() ?? '')
-                        ?? (qty * ppu);
-                    final payStatus = sale['payment_status']?.toString() ?? 'unknown';
-
-                    final firstName = sale['sold_by_first_name']?.toString() ?? '';
-                    final lastName = sale['sold_by_last_name']?.toString() ?? '';
-                    final distName = '$firstName $lastName'.trim();
-
-                    final rawCreated = sale['created_at']?.toString() ?? '';
-                    final dtSale = DateTime.tryParse(rawCreated) ?? DateTime.now();
-                    final formattedTime = DateFormat('HH:mm').format(dtSale);
-
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(12),
-                        title: Text('$custName - $prodName', style: theme.textTheme.bodyLarge),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Qty: $qty, Price: \$${ppu.toStringAsFixed(2)}'),
-                            Text('Total: \$${totPrice.toStringAsFixed(2)}'),
-                            Text('Status: ${payStatus.toUpperCase()}'),
-                            Text('Distributor: ${distName.isNotEmpty ? distName : "unknown"}'),
-                            Text('Location: $locName'),
-                            Text('Time: $formattedTime'),
-                          ],
-                        ),
-                        onTap: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: const Text('Sale Details'),
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Customer: $custName'),
-                                  Text('Product: $prodName'),
-                                  Text('Quantity: $qty'),
-                                  Text('Price/Unit: \$${ppu.toStringAsFixed(2)}'),
-                                  Text('Total: \$${totPrice.toStringAsFixed(2)}'),
-                                  Text('Payment: ${payStatus.toUpperCase()}'),
-                                  Text('Distributor: ${distName.isNotEmpty ? distName : "unknown"}'),
-                                  Text('Location: $locName'),
-                                  Text('Time: $formattedTime'),
-                                ],
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('Close'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                )
-              ],
+                children: daySales.map((sale) => _buildSaleItem(sale, theme)).toList(),
+              ),
             );
           },
         );
@@ -361,11 +358,104 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
     );
   }
 
-  /// Helper to parse a "name" from a field (for customer, product, or location).
+  /// Build an individual sale item.
+  Widget _buildSaleItem(Map<String, dynamic> sale, ThemeData theme) {
+    final custName = _parseName(sale['customer']);
+    final prodName = _parseName(sale['product']);
+    final locName = _parseName(sale['location']);
+    final qty = num.tryParse(sale['quantity']?.toString() ?? '') ?? 0;
+    final ppu = num.tryParse(sale['price_per_unit']?.toString() ?? '') ?? 0;
+    final totPrice = num.tryParse(sale['total_amount']?.toString() ?? '') ?? (qty * ppu);
+    final payStatus = sale['payment_status']?.toString() ?? 'unknown';
+    final firstName = sale['sold_by_first_name']?.toString() ?? '';
+    final lastName = sale['sold_by_last_name']?.toString() ?? '';
+    final distName = '$firstName $lastName'.trim();
+    final rawCreated = sale['created_at']?.toString() ?? '';
+    final dtSale = DateTime.tryParse(rawCreated) ?? DateTime.now();
+    final formattedTime = DateFormat('HH:mm').format(dtSale);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        title: Text('$custName - $prodName', style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Qty: $qty, Price: \$${ppu.toStringAsFixed(2)}', style: theme.textTheme.bodyMedium),
+              Text('Total: \$${totPrice.toStringAsFixed(2)}', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+              Text('Status: ${payStatus.toUpperCase()}', style: theme.textTheme.bodyMedium?.copyWith(color: payStatus.toLowerCase() == 'paid' ? Colors.green : Colors.red)),
+              Text('Distributor: ${distName.isNotEmpty ? distName : "unknown"}', style: theme.textTheme.bodySmall),
+              Text('Location: $locName', style: theme.textTheme.bodySmall),
+              Text('Time: $formattedTime', style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey)),
+            ],
+          ),
+        ),
+        onTap: () => _showSaleDetails(context, sale),
+      ),
+    );
+  }
+
+  /// Helper to parse a "name" from a field.
   String _parseName(dynamic field) {
     if (field is Map) {
-      return field['name']?.toString() ?? 'unknown';
+      return field['name']?.toString() ?? 'Unknown';
     }
-    return 'unknown';
+    return 'Unknown';
+  }
+
+  /// Display sale details in a dialog.
+  void _showSaleDetails(BuildContext context, Map<String, dynamic> sale) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sale Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailRow('Customer:', _parseName(sale['customer'])),
+              _buildDetailRow('Product:', _parseName(sale['product'])),
+              _buildDetailRow('Quantity:', sale['quantity'].toString()),
+              _buildDetailRow('Price/Unit:', '\$${sale['price_per_unit']}'),
+              _buildDetailRow('Total:', '\$${sale['total_amount']}'),
+              _buildDetailRow('Payment:', sale['payment_status'].toString().toUpperCase()),
+              _buildDetailRow('Location:', _parseName(sale['location'])),
+              _buildDetailRow('Seller:', '${sale['sold_by_first_name']} ${sale['sold_by_last_name']}'),
+              _buildDetailRow(
+                'Time:',
+                DateFormat('MMM dd, yyyy HH:mm').format(DateTime.parse(sale['created_at'].toString()))
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Helper to build a detail row.
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+          const SizedBox(width: 8),
+          Flexible(child: Text(value)),
+        ],
+      ),
+    );
   }
 }

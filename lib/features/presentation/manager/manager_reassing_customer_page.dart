@@ -39,32 +39,24 @@ class _ManagerReassignCustomerPageState
           .from('customers')
           .select('id, name, phone, assigned_to')
           .order('name');
-      if (customerResponse is List) {
-        _customers = List<Map<String, dynamic>>.from(customerResponse);
-      } else {
-        _customers = [];
-      }
-
+      _customers = List<Map<String, dynamic>>.from(customerResponse);
+    
       // Fetch distributors from the 'profiles' table where role is 'distributor'.
       final distributorResponse = await SupabaseService.client
           .from('profiles')
           .select('user_id, first_name, last_name, role')
           .eq('role', 'distributor')
           .order('first_name');
-      if (distributorResponse is List) {
-        _distributors = List<Map<String, dynamic>>.from(distributorResponse)
-            .map((d) {
-          final firstName = d['first_name'] as String? ?? '';
-          final lastName = d['last_name'] as String? ?? '';
-          return {
-            'id': d['user_id'] as String,
-            'name': '$firstName $lastName'.trim(),
-          };
-        }).toList();
-      } else {
-        _distributors = [];
-      }
-    } catch (e) {
+      _distributors = List<Map<String, dynamic>>.from(distributorResponse)
+          .map((d) {
+        final firstName = d['first_name'] as String? ?? '';
+        final lastName = d['last_name'] as String? ?? '';
+        return {
+          'id': d['user_id'] as String,
+          'name': '$firstName $lastName'.trim(),
+        };
+      }).toList();
+        } catch (e) {
       debugPrint('Error fetching data: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -94,7 +86,7 @@ class _ManagerReassignCustomerPageState
           .update({'assigned_to': _selectedDistributorId})
           .eq('id', _selectedCustomerId!)
           .select();
-      if (response == null || (response as List).isEmpty) {
+      if ((response as List).isEmpty) {
         throw Exception("Update failed: No row updated.");
       }
       if (!mounted) return;

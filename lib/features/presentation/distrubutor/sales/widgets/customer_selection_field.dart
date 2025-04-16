@@ -5,10 +5,10 @@ class CustomerSelectionField extends StatefulWidget {
   final ValueChanged<String?> onCustomerChanged;
 
   const CustomerSelectionField({
-    Key? key,
+    super.key,
     required this.customers,
     required this.onCustomerChanged,
-  }) : super(key: key);
+  });
 
   @override
   State<CustomerSelectionField> createState() => _CustomerSelectionFieldState();

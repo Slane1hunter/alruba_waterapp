@@ -49,6 +49,9 @@ class OfflineSale extends HiveObject {
   @HiveField(14)
   String? preciseLocation;
 
+  @HiveField(15)
+  String? id;
+
   OfflineSale({
     required this.isNewCustomer,
     this.newCustomerPhone,
@@ -65,5 +68,6 @@ class OfflineSale extends HiveObject {
     required this.soldBy,
     required this.locationId,
     this.preciseLocation,
+     required this.id,
   });
 }
