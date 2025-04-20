@@ -6,8 +6,8 @@ final customersProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async
       .from('customers')
       .select('*');
 
-  print("Response runtimeType: ${response.runtimeType}");
+  //print("Response runtimeType: ${response.runtimeType}");
   
-  print("Fetched customers count: ${response.length}");
+  //print("Fetched customers count: ${response.length}");
   return response.cast<Map<String, dynamic>>();
 });

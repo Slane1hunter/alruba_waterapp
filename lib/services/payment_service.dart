@@ -20,9 +20,9 @@ class PaymentService {
           .update({'status': 'paid'})
           .eq('id', gallonTransactionId);
 
-      print("✅ Both sale and gallon transaction set to 'paid'.");
+      //print("✅ Both sale and gallon transaction set to 'paid'.");
     } catch (e) {
-      print("❌ Error marking as paid: $e");
+      //print("❌ Error marking as paid: $e");
       rethrow;
     }
   }
@@ -37,6 +37,6 @@ class PaymentService {
       'saleId': saleId,
       'gallonTransactionId': gallonTransactionId,
     });
-    print("🟠 Payment queued offline.");
+    //print("🟠 Payment queued offline.");
   }
 }

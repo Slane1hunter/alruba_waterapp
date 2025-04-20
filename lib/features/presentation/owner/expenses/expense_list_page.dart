@@ -1,0 +1,535 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:collection/collection.dart';
+import 'package:intl/intl.dart';
+
+import 'package:alruba_waterapp/models/expense.dart';
+import 'package:alruba_waterapp/providers/expense_provider.dart';
+import 'package:alruba_waterapp/repositories/expense_repository.dart';
+
+class ExpensesScreen extends ConsumerStatefulWidget {
+  const ExpensesScreen({super.key});
+
+  @override
+  ConsumerState<ExpensesScreen> createState() => _ExpensesScreenState();
+}
+
+class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
+  String? _selectedTypeFilter;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(expenseProvider);
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Expenses Overview'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.filter_alt),
+            tooltip: 'Clear filter',
+            onPressed: _selectedTypeFilter == null
+                ? null
+                : () => setState(() => _selectedTypeFilter = null),
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => ref.read(expenseProvider.notifier).loadExpenses(),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'add_expense_fab',
+        onPressed: () => _showAddExpenseForm(context),
+        child: const Icon(Icons.add),
+      ),
+      body: RefreshIndicator(
+        onRefresh: () => ref.read(expenseProvider.notifier).loadExpenses(),
+        child: _buildBody(context, state, theme),
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, ExpenseState state, ThemeData theme) {
+    if (state.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (state.error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(state.error!, textAlign: TextAlign.center),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: () =>
+                    ref.read(expenseProvider.notifier).loadExpenses(),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (state.expenses.isEmpty) {
+      return const Center(child: Text('No expenses found'));
+    }
+
+    final filtered = _selectedTypeFilter == null
+        ? state.expenses
+        : state.expenses
+            .where((e) => e.type == _selectedTypeFilter)
+            .toList(growable: false);
+
+    final grouped = groupBy(
+      filtered,
+      (Expense e) => DateTime(e.date.year, e.date.month),
+    );
+
+    final months = grouped.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        _buildTypeFilterChips(theme),
+        ...months.expand((month) => [
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _StickyHeaderDelegate(
+                  minHeight: 48,
+                  maxHeight: 48,
+                  child: _MonthHeader(
+                    month: month,
+                    expenses: grouped[month]!,
+                  ),
+                ),
+              ),
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final exp = grouped[month]![index];
+                    return _ExpenseItem(
+                      expense: exp,
+                      onTap: () => _showEditExpenseForm(context, exp),
+                      onDelete: () => _deleteExpense(exp),
+                    );
+                  },
+                  childCount: grouped[month]!.length,
+                ),
+              ),
+            ]),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: MediaQuery.of(context).padding.bottom + 80,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTypeFilterChips(ThemeData theme) {
+    final asyncTypes = ref.watch(expenseTypesProvider);
+
+    return SliverToBoxAdapter(
+      child: asyncTypes.when(
+        loading: () => const SizedBox.shrink(),
+        error: (_, __) => const SizedBox.shrink(),
+        data: (types) => SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          child: Row(
+            children: [
+              ChoiceChip(
+                label: const Text('All'),
+                selected: _selectedTypeFilter == null,
+                onSelected: (_) =>
+                    setState(() => _selectedTypeFilter = null),
+              ),
+              ...types.map((t) => Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: ChoiceChip(
+                      label: Text(toBeginningOfSentenceCase(t) ?? t),
+                      selected: _selectedTypeFilter == t,
+                      onSelected: (_) =>
+                          setState(() => _selectedTypeFilter = t),
+                    ),
+                  )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAddExpenseForm(BuildContext context) {
+    _openExpenseForm(context, null);
+  }
+
+  void _showEditExpenseForm(BuildContext context, Expense exp) {
+    _openExpenseForm(context, exp);
+  }
+
+  Future<void> _openExpenseForm(BuildContext context, Expense? expense) {
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          MediaQuery.of(ctx).viewInsets.bottom + 16,
+        ),
+        child: _ExpenseForm(
+          expense: expense,
+          onSave: (exp) async {
+            if (expense == null) {
+              await ref.read(expenseProvider.notifier).addExpense(exp);
+            } else {
+              await ref.read(expenseProvider.notifier).updateExpense(exp);
+            }
+            ref.invalidate(expenseTypesProvider);
+            if (ctx.mounted) Navigator.pop(ctx);
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteExpense(Expense exp) async {
+    await ref.read(expenseProvider.notifier).deleteExpense(exp.id);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Expense deleted'),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => ref
+                .read(expenseProvider.notifier)
+                .addExpense(exp),
+          ),
+        ),
+      );
+    }
+  }
+}
+
+class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final double minHeight;
+  final double maxHeight;
+  final Widget child;
+
+  _StickyHeaderDelegate({
+    required this.minHeight,
+    required this.maxHeight,
+    required this.child,
+  });
+
+  @override
+  double get minExtent => minHeight;
+
+  @override
+  double get maxExtent => maxHeight;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return child;
+  }
+
+  @override
+  bool shouldRebuild(_StickyHeaderDelegate oldDelegate) {
+    return maxHeight != oldDelegate.maxHeight ||
+        minHeight != oldDelegate.minHeight ||
+        child != oldDelegate.child;
+  }
+}
+
+class _MonthHeader extends StatelessWidget {
+  const _MonthHeader({
+    required this.month,
+    required this.expenses,
+  });
+
+  final DateTime month;
+  final List<Expense> expenses;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final total =
+        expenses.fold<double>(0, (sum, e) => sum + e.amount).toStringAsFixed(2);
+
+    return Container(
+      color: theme.scaffoldBackgroundColor,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Text(DateFormat('MMMM y').format(month),
+              style: theme.textTheme.titleMedium),
+          const Spacer(),
+          Chip(
+            label: Text('\$$total'),
+            backgroundColor: Colors.green.shade100,
+            avatar: const Icon(Icons.summarize, size: 18, color: Colors.green),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExpenseItem extends StatelessWidget {
+  const _ExpenseItem({
+    required this.expense,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final Expense expense;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dismissible(
+      key: ValueKey(expense.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: Colors.redAccent,
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      onDismissed: (_) => onDelete(),
+      child: Card(
+        elevation: 2,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        child: ListTile(
+          title: Text(toBeginningOfSentenceCase(expense.type) ?? expense.type),
+          subtitle: Text(
+            [
+              DateFormat.yMMMd().format(expense.date),
+              if (expense.description?.isNotEmpty ?? false)
+                expense.description!
+            ].join(' • '),
+          ),
+          trailing: Text('\$${expense.amount.toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          onTap: onTap,
+        ),
+      ),
+    );
+  }
+}
+
+final expenseTypesProvider = FutureProvider<List<String>>(
+    (ref) => ref.watch(expenseRepositoryProvider).getExpenseTypes());
+
+class _ExpenseForm extends StatefulWidget {
+  const _ExpenseForm({this.expense, required this.onSave});
+
+  final Expense? expense;
+  final void Function(Expense) onSave;
+
+  @override
+  State<_ExpenseForm> createState() => _ExpenseFormState();
+}
+
+class _ExpenseFormState extends State<_ExpenseForm> {
+  final _key = GlobalKey<FormState>();
+
+  late TextEditingController _amountCtrl;
+  late TextEditingController _descCtrl;
+  late DateTime _date;
+  String? _type;
+  bool _addingNewType = false;
+  final _newTypeCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _type = widget.expense?.type;
+    _amountCtrl = TextEditingController(
+        text: widget.expense?.amount.toString() ?? '');
+    _descCtrl = TextEditingController(text: widget.expense?.description ?? '');
+    _date = widget.expense?.date ?? DateTime.now();
+  }
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _descCtrl.dispose();
+    _newTypeCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Form(
+      key: _key,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(widget.expense == null ? 'Add Expense' : 'Edit Expense',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+
+          Consumer(builder: (context, ref, _) {
+            final asyncTypes = ref.watch(expenseTypesProvider);
+            return asyncTypes.when(
+              loading: () => const CircularProgressIndicator(),
+              error: (e, _) => Text('Error: $e'),
+              data: (types) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: _type,
+                    decoration: const InputDecoration(
+                      labelText: 'Type',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      ...types.map((t) => DropdownMenuItem(
+                            value: t,
+                            child: Text(toBeginningOfSentenceCase(t) ?? t),
+                          )),
+                      const DropdownMenuItem(
+                        value: '_add_new_',
+                        child: Text('Add new type…'),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      if (val == '_add_new_') {
+                        setState(() {
+                          _addingNewType = true;
+                          _type = null;
+                        });
+                      } else {
+                        setState(() {
+                          _addingNewType = false;
+                          _type = val;
+                        });
+                      }
+                    },
+                    validator: (_) {
+                      if (!_addingNewType && (_type == null || _type!.isEmpty)) {
+                        return 'Select a type';
+                      }
+                      return null;
+                    },
+                  ),
+                  if (_addingNewType)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: TextFormField(
+                        controller: _newTypeCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'New type',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (v) {
+                          if (_addingNewType && (v == null || v.trim().isEmpty)) {
+                            return 'Enter a type';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
+
+          const SizedBox(height: 12),
+
+          TextFormField(
+            controller: _amountCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Amount',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.attach_money),
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            validator: (v) {
+              if (v == null || v.isEmpty) return 'Required';
+              final d = double.tryParse(v);
+              if (d == null || d <= 0) return 'Invalid';
+              return null;
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          TextFormField(
+            controller: _descCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Description (optional)',
+              border: OutlineInputBorder(),
+            ),
+            minLines: 1,
+            maxLines: 3,
+          ),
+
+          const SizedBox(height: 12),
+
+          ListTile(
+            tileColor: Colors.grey.shade200,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            title: Text('Date: ${DateFormat.yMMMd().format(_date)}'),
+            trailing: const Icon(Icons.calendar_today),
+            onTap: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: _date,
+                firstDate: DateTime(2000),
+                lastDate: DateTime.now(),
+              );
+              if (picked != null) setState(() => _date = picked);
+            },
+          ),
+
+          const SizedBox(height: 20),
+
+          ElevatedButton.icon(
+            icon: const Icon(Icons.save),
+            label: Text(widget.expense == null ? 'Add Expense' : 'Save'),
+            onPressed: _submit,
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 48),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _submit() {
+    if (!_key.currentState!.validate()) return;
+
+    final typeStr = _addingNewType ? _newTypeCtrl.text.trim() : _type!;
+    final amount = double.parse(_amountCtrl.text);
+
+    widget.onSave(
+      Expense(
+        id: widget.expense?.id ?? '',
+        type: typeStr,
+        amount: amount,
+        description: _descCtrl.text.trim(),
+        date: _date,
+        isRecurring: widget.expense?.isRecurring ?? false,
+        recurrenceEnd: widget.expense?.recurrenceEnd,
+        createdAt: widget.expense?.createdAt ?? DateTime.now(),
+      ),
+    );
+  }
+}

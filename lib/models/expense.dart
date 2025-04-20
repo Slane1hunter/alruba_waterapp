@@ -5,6 +5,9 @@ class Expense {
   final double amount;
   final String? description;
   final DateTime date;
+  final bool isRecurring;
+  final DateTime? recurrenceEnd;
+  final DateTime createdAt;
 
   Expense({
     required this.id,
@@ -12,21 +15,34 @@ class Expense {
     required this.amount,
     this.description,
     required this.date,
+    this.isRecurring = false,
+    this.recurrenceEnd,
+    required this.createdAt,
   });
 
-  factory Expense.fromJson(Map<String, dynamic> json) => Expense(
-        id: json['id'] as String,
-        type: json['type'] as String,
-        amount: (json['amount'] as num).toDouble(),
-        description: json['description'] as String?,
-        date: DateTime.parse(json['date'] as String),
-      );
+  factory Expense.fromMap(Map<String, dynamic> map) {
+    return Expense(
+      id: map['id'] as String,
+      type: map['type'] as String,
+      amount: (map['amount'] as num).toDouble(),
+      description: map['description'] as String?,
+      date: DateTime.parse(map['date'] as String),
+      isRecurring: map['is_recurring'] as bool? ?? false,
+      recurrenceEnd: map['recurrence_end'] != null
+          ? DateTime.parse(map['recurrence_end'] as String)
+          : null,
+      createdAt: DateTime.parse(map['created_at'] as String),
+    );
+  }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type,
-        'amount': amount,
-        'description': description,
-        'date': date.toIso8601String(),
-      };
+  Map<String, dynamic> toMap() {
+    return {
+      'type': type,
+      'amount': amount,
+      'description': description,
+      'date': date.toIso8601String().split('T').first,
+      'is_recurring': isRecurring,
+      'recurrence_end': recurrenceEnd?.toIso8601String().split('T').first,
+    };
+  }
 }
