@@ -1,14 +1,13 @@
 import 'package:alruba_waterapp/features/presentation/logout_button.dart';
+import 'package:alruba_waterapp/features/presentation/manager/Gallon_transaction_status_page.dart';
+import 'package:alruba_waterapp/features/presentation/manager/manager_dashboard_page.dart';
 import 'package:alruba_waterapp/features/presentation/owner/expenses/expense_list_page.dart';
+import 'package:alruba_waterapp/features/presentation/owner/owner_dashboard_page.dart';
 import 'package:alruba_waterapp/features/presentation/owner/owner_management_page.dart';
 import 'package:alruba_waterapp/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Home screen shown to “Owner” users.
-/// Two tabs:
-///   1. Products / management
-///   2. Expenses
 class OwnerHomePage extends ConsumerStatefulWidget {
   const OwnerHomePage({super.key});
 
@@ -18,91 +17,134 @@ class OwnerHomePage extends ConsumerStatefulWidget {
 
 class _OwnerHomePageState extends ConsumerState<OwnerHomePage> {
   int _currentIndex = 0;
-
-  /// We keep the pages _const_ so Flutter can
-  /// short‑circuit rebuilds when switching tabs.
-  static const _pages = <Widget>[
-    OwnerManagementPage(),
-    ExpensesScreen(),
+  bool _isLoading = false;
+  final List<Widget> _pages = [
+    const OwnerManagementPage(),
+    const ExpensesScreen(),
+    const ManagerDashboardPage(),
+    const GallonTransactionStatusPage(),
+    const DailySalesPage(),
+   //const OwnerMonthlyFinancePage()
   ];
 
   @override
   void initState() {
     super.initState();
-    _preloadReferenceData();   // fetch reference look‑up tables once
-    _sanityCheckAccess();      // quick RLS sanity check (optional)
+    _fetchInitialData();
   }
 
-  /* ---------------------------------------------------------------------------
-   *  Internal helpers
-   * ------------------------------------------------------------------------ */
-
-  /// Fetches products & locations concurrently.
-  Future<void> _preloadReferenceData() async {
+  Future<void> _fetchInitialData() async {
+    if (mounted) setState(() => _isLoading = true);
+    
     try {
-      await Future.wait([
-        SupabaseService.client.from('products').select(),
-        SupabaseService.client.from('locations').select(),
+      final responses = await Future.wait([
+        SupabaseService.client.from('products').select('*'),
+        SupabaseService.client.from('locations').select('*'),
       ]);
-      //  You could cache these responses inside a Riverpod provider
-      //  for the rest of the app to read; omitted to keep parity
-      //  with your original logic.
-    } catch (err, st) {
-      debugPrint('Preload failed: $err\n$st');
+
+      debugPrint('Products: ${responses[0]}');
+      debugPrint('Locations: ${responses[1]}');
+    } catch (e) {
+      _showErrorSnackbar('Failed to load data: ${e.toString()}');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  /// Fires two “dummy” selects to confirm the owner has access to tables.
-  Future<void> _sanityCheckAccess() async {
-    for (final table in ['products', 'locations']) {
-      try {
-        await SupabaseService.client.from(table).select().limit(1);
-      } catch (e) {
-        debugPrint('❌  Access check failed for `$table`: $e');
-      }
-    }
+  void _showErrorSnackbar(String message) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    });
   }
-
-  /* ---------------------------------------------------------------------------
-   *  UI
-   * ------------------------------------------------------------------------ */
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Owner dashboard'),
+        title: const Text('Owner Dashboard'),
+        centerTitle: true,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.secondary,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: const [LogoutButton()],
       ),
-
-      // Keeps both pages alive; fast tab‑switching
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
-
-      bottomNavigationBar: NavigationBar(           // Material‑3 bottom bar
-        height: 64,
-        elevation: 0,
-        backgroundColor: colorScheme.surface,
-        indicatorColor: colorScheme.primaryContainer,
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (i) => setState(() => _currentIndex = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined),
-            selectedIcon: Icon(Icons.inventory_2),
-            label: 'Products',
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _currentIndex,
+            children: _pages,
           ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: 'Expenses',
-          ),
+          if (_isLoading)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+            ),
         ],
       ),
+      bottomNavigationBar: _buildEnhancedNavBar(context),
+    );
+  }
+
+  BottomNavigationBar _buildEnhancedNavBar(BuildContext context) {
+    return BottomNavigationBar(
+      currentIndex: _currentIndex,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      selectedItemColor: Theme.of(context).colorScheme.primary,
+      unselectedItemColor: Colors.grey.shade600,
+      selectedLabelStyle: TextStyle(
+        fontWeight: FontWeight.w600,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      type: BottomNavigationBarType.fixed,
+      elevation: 8,
+      iconSize: 28,
+      onTap: (index) => setState(() => _currentIndex = index),
+      items: const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.inventory_2_outlined),
+          activeIcon: Icon(Icons.inventory_2),
+          label: 'Products',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.receipt_long_outlined),
+          activeIcon: Icon(Icons.receipt_long),
+          label: 'Expenses',
+        ),
+        
+        BottomNavigationBarItem(
+          icon: Icon(Icons.shopping_bag_outlined),
+          activeIcon: Icon(Icons.shopping_bag),
+          label: 'Sales',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.local_drink_outlined),
+          activeIcon: Icon(Icons.local_drink),
+          label: 'Gallons',
+        ),
+         BottomNavigationBarItem(
+          icon: Icon(Icons.sell_outlined,),
+          activeIcon: Icon(Icons.sell),
+          label: 'Profit',
+        ),
+      ],
     );
   }
 }

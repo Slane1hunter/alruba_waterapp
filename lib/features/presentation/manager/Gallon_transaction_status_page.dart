@@ -13,26 +13,26 @@ class GallonTransactionStatusPage extends ConsumerStatefulWidget {
       _GallonTransactionStatusPageState();
 }
 
-class _GallonTransactionStatusPageState extends ConsumerState<GallonTransactionStatusPage> {
-  // All transaction data once loaded.
+class _GallonTransactionStatusPageState
+    extends ConsumerState<GallonTransactionStatusPage> {
   List<Map<String, dynamic>> _allTransactions = [];
-
-  // UI filter states.
   bool _isLoading = false;
-  String _searchText = '';              // For dynamic name filtering
-  String _selectedStatusFilter = 'all'; // 'all', 'paid', 'unpaid'
+  String _searchText = '';
+  String _selectedStatusFilter = 'all';
   DateTime? _startDate;
   DateTime? _endDate;
-
   final TextEditingController _searchController = TextEditingController();
+  final _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadTransactions();
+    _searchController.addListener(() {
+      setState(() => _searchText = _searchController.text.trim().toLowerCase());
+    });
   }
 
-  /// Fetch all transactions from Supabase once.
   Future<void> _loadTransactions() async {
     setState(() => _isLoading = true);
     try {
@@ -40,76 +40,58 @@ class _GallonTransactionStatusPageState extends ConsumerState<GallonTransactionS
           .from('gallon_transactions')
           .select('*, customer:customers!customer_id(id, name), sale_id')
           .order('created_at', ascending: false);
-      _allTransactions = List<Map<String, dynamic>>.from(result);
+
+      _allTransactions = (List<Map<String, dynamic>>.from(result)).map((tx) {
+        return {
+          ...tx,
+          'quantity': (tx['quantity'] as num?)?.toInt() ?? 0,
+          'amount': (tx['amount'] as num?)?.toDouble() ?? 0.0,
+          'status': (tx['status']?.toString().trim().toLowerCase()) ?? 'unpaid',
+          'created_at': tx['created_at'] ?? DateTime.now().toIso8601String(),
+          'customer': tx['customer'] ?? {'id': 'unknown', 'name': 'Unknown Customer'},
+        };
+      }).toList();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading transactions: $e')),
-        );
-      }
+      _showErrorSnackBar('Error loading transactions: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  /// Filter in-memory by name, status, and date.
   List<Map<String, dynamic>> _filterTransactions() {
     return _allTransactions.where((tx) {
-      // 1) Payment Status
-      if (_selectedStatusFilter != 'all') {
-        final status = (tx['status'] ?? '').toString().trim().toLowerCase();
-        if (status != _selectedStatusFilter) return false;
+      if (_selectedStatusFilter != 'all' &&
+          tx['status'] != _selectedStatusFilter) {
+        return false;
       }
 
-      // 2) Date Range
-      final createdAtStr = (tx['created_at'] ?? '').toString();
-      final createdAt = DateTime.tryParse(createdAtStr);
+      final createdAt = DateTime.tryParse(tx['created_at']?.toString() ?? '');
       if (createdAt != null) {
         if (_startDate != null && createdAt.isBefore(_startDate!)) return false;
         if (_endDate != null && createdAt.isAfter(_endDate!)) return false;
       }
 
-      // 3) Search by Customer Name
-      final customer = tx['customer'];
-      final customerName = (customer is Map)
-          ? (customer['name'] ?? '').toString().toLowerCase()
-          : '';
-      // If _searchText is non-empty, ensure the name contains it
-      if (_searchText.isNotEmpty && !customerName.contains(_searchText)) {
-        return false;
-      }
-
-      return true;
+      final customerName = ((tx['customer'] as Map)['name'] ?? '')
+          .toString()
+          .toLowerCase();
+      return customerName.contains(_searchText);
     }).toList();
   }
 
-  /// Group the filtered list by customer.
-  Map<String, List<Map<String, dynamic>>> _groupByCustomer(List<Map<String, dynamic>> list) {
-    return groupBy(list, (Map<String, dynamic> tx) {
-      final customer = tx['customer'];
-      if (customer is Map && customer['id'] != null) {
-        return customer['id'].toString();
-      }
-      return 'unknown';
-    });
+  Map<String, List<Map<String, dynamic>>> _groupByCustomer(
+      List<Map<String, dynamic>> list) {
+    return groupBy(list, (tx) => (tx['customer'] as Map)['id']?.toString() ?? '');
   }
 
-  /// Toggle the status of a transaction to "paid."
   Future<void> _toggleStatus(Map<String, dynamic> transaction) async {
     final transactionId = transaction['id'].toString();
     final saleId = transaction['sale_id']?.toString();
-    final currentStatus = (transaction['status'] ?? '').toString().trim().toLowerCase();
+    final currentStatus = transaction['status']?.toString().toLowerCase();
 
-    if (currentStatus == 'paid') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Already marked as paid.')),
-      );
-      return;
-    }
-    if (saleId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sale ID not found; cannot update.')),
-      );
+    if (currentStatus == 'paid' || saleId == null) {
+      _showErrorSnackBar(currentStatus == 'paid'
+          ? 'Already marked as paid'
+          : 'Invalid sale ID');
       return;
     }
 
@@ -118,28 +100,20 @@ class _GallonTransactionStatusPageState extends ConsumerState<GallonTransactionS
         saleId: saleId,
         gallonTransactionId: transactionId,
       );
-      // Reflect the "paid" status locally.
-      setState(() {
-        transaction['status'] = 'paid';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Marked as paid successfully!')),
-      );
+      setState(() => transaction['status'] = 'paid');
+      _showSuccessSnackBar('Marked as paid successfully!');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      _showErrorSnackBar('Error: $e');
     }
   }
 
-  /// Pick a date range.
   Future<void> _selectDateRange() async {
     final now = DateTime.now();
     final picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(now.year - 1),
       lastDate: DateTime(now.year + 1),
-      initialDateRange: (_startDate != null && _endDate != null)
+      initialDateRange: _startDate != null && _endDate != null
           ? DateTimeRange(start: _startDate!, end: _endDate!)
           : null,
     );
@@ -151,6 +125,24 @@ class _GallonTransactionStatusPageState extends ConsumerState<GallonTransactionS
     }
   }
 
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+      ),
+    );
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filteredList = _filterTransactions();
@@ -160,201 +152,303 @@ class _GallonTransactionStatusPageState extends ConsumerState<GallonTransactionS
       appBar: AppBar(
         title: const Text('Gallon Transactions'),
         centerTitle: true,
+        elevation: 4,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : grouped.isEmpty
-              ? Column(
-                  children: [
-                    _buildFilters(),
-                    const Expanded(child: Center(child: Text('No transactions found'))),
-                  ],
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadTransactions,
-                  child: ListView(
-                    children: [
-                      _buildFilters(),
-                      for (final entry in grouped.entries)
-                        _buildCustomerGroupTile(entry.key, entry.value),
-                    ],
-                  ),
-                ),
+          : _buildMainContent(grouped),
     );
   }
 
-  /// The filter panel at the top — no explicit "Search" button; we filter on every keystroke.
-  Widget _buildFilters() {
-    return Card(
-      margin: const EdgeInsets.all(12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Live search: onChanged
-            TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                labelText: 'Search by Customer Name',
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: (val) {
-                setState(() {
-                  _searchText = val.trim().toLowerCase();
-                });
-              },
+  Widget _buildMainContent(Map<String, List<Map<String, dynamic>>> grouped) {
+    return RefreshIndicator(
+      onRefresh: _loadTransactions,
+      child: CustomScrollView(
+        controller: _scrollController,
+        slivers: [
+          SliverToBoxAdapter(child: _buildFilterSection()),
+          if (grouped.isEmpty)
+            const SliverFillRemaining(
+              child: Center(child: Text('No transactions found')),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => _CustomerGroupTile(
+                      group: grouped.entries.elementAt(index),
+                      onStatusToggle: _toggleStatus,
+                    ),
+                childCount: grouped.length),
             ),
-            const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
 
-            // Reload data button
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.refresh),
-                label: const Text('Reload Data'),
-                onPressed: _loadTransactions,
-              ),
-            ),
-            const SizedBox(height: 16),
+  Widget _buildFilterSection() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _buildSearchField(),
+          const SizedBox(height: 16),
+          _buildFilterControls(),
+        ],
+      ),
+    );
+  }
 
-            // Payment status + date range
-            Row(
-              children: [
-                const Text('Status:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  value: _selectedStatusFilter,
-                  items: const [
-                    DropdownMenuItem(value: 'all', child: Text('All')),
-                    DropdownMenuItem(value: 'paid', child: Text('Paid')),
-                    DropdownMenuItem(value: 'unpaid', child: Text('Unpaid')),
-                  ],
-                  onChanged: (val) {
-                    setState(() {
-                      _selectedStatusFilter = val ?? 'all';
-                    });
-                  },
-                ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: _selectDateRange,
-                  icon: const Icon(Icons.date_range),
-                  label: Text(
-                    (_startDate != null && _endDate != null)
-                        ? '${DateFormat('MMM dd').format(_startDate!)} - ${DateFormat('MMM dd').format(_endDate!)}'
-                        : 'Select Date Range',
-                  ),
-                ),
-                if (_startDate != null || _endDate != null)
-                  IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      setState(() {
-                        _startDate = null;
-                        _endDate = null;
-                      });
-                    },
-                  ),
-              ],
-            ),
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _searchController,
+      decoration: InputDecoration(
+        labelText: 'Search Customer',
+        prefixIcon: const Icon(Icons.search),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        filled: true,
+        fillColor: Colors.grey.shade100,
+      ),
+    );
+  }
+
+  Widget _buildFilterControls() {
+    return Row(
+      children: [
+        Expanded(child: _buildStatusDropdown()),
+        const SizedBox(width: 16),
+        Expanded(child: _buildDateRangeSelector()),
+      ],
+    );
+  }
+
+  Widget _buildStatusDropdown() {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: 'Status',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedStatusFilter,
+          items: const [
+            DropdownMenuItem(value: 'all', child: Text('All')),
+            DropdownMenuItem(value: 'paid', child: Text('Paid')),
+            DropdownMenuItem(value: 'unpaid', child: Text('Unpaid')),
+            DropdownMenuItem(value: 'deposit', child: Text('Deposit')),
           ],
+          onChanged: (val) => setState(() => _selectedStatusFilter = val ?? 'all'),
         ),
       ),
     );
   }
 
-  Widget _buildCustomerGroupTile(String customerId, List<Map<String, dynamic>> transactions) {
-    // Identify the customer name from the first transaction
-    String customerName = 'Unknown Customer';
-    if (transactions.isNotEmpty) {
-      final firstTx = transactions.first;
-      final cust = firstTx['customer'];
-      if (cust is Map && cust['name'] != null) {
-        customerName = cust['name'].toString();
-      }
-    }
-
-    // Summaries
-    final totalQty = transactions.fold<int>(0, (sum, tx) {
-      return sum + (int.tryParse(tx['quantity']?.toString() ?? '0') ?? 0);
-    });
-    final totalAmt = transactions.fold<double>(0, (sum, tx) {
-      return sum + (double.tryParse(tx['amount']?.toString() ?? '0') ?? 0);
-    });
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 3,
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        title: Text(
-          customerName,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Row(
-            children: [
-              Text('Total Qty: $totalQty', style: const TextStyle(fontSize: 16)),
-              const SizedBox(width: 16),
-              Text('Total Amount: \$${totalAmt.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16)),
-            ],
+  Widget _buildDateRangeSelector() {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: 'Date Range',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(
+            child: TextButton(
+              onPressed: _selectDateRange,
+              child: Text(
+                _startDate != null && _endDate != null
+                    ? '${DateFormat('MMM dd').format(_startDate!)} - '
+                        '${DateFormat('MMM dd').format(_endDate!)}'
+                    : 'Select Dates',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ),
-        ),
-        children: transactions.map(_buildTransactionItem).toList(),
+          if (_startDate != null)
+            IconButton(
+              icon: const Icon(Icons.clear, size: 20),
+              onPressed: () => setState(() {
+                _startDate = null;
+                _endDate = null;
+              }),
+            ),
+        ],
       ),
     );
   }
-
-  Widget _buildTransactionItem(Map<String, dynamic> tx) {
-    final type = (tx['transaction_type'] ?? 'Unknown').toString();
-    final qty = (tx['quantity'] ?? '0').toString();
-    final amt = (tx['amount'] ?? '0').toString();
-    final status = (tx['status'] ?? '').toString().trim().toLowerCase();
-    final isPaid = status == 'paid';
-
-    final createdAtStr = (tx['created_at'] ?? '').toString();
-    final createdAt = DateTime.tryParse(createdAtStr);
-    final dateFormatted = (createdAt != null)
-        ? DateFormat('MMM dd, yyyy • hh:mm a').format(createdAt)
-        : 'Unknown date';
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: ListTile(
-        title: Text('Type: ${_capitalize(type)}', style: const TextStyle(fontSize: 16)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Quantity: $qty', style: const TextStyle(fontSize: 16)),
-            Text('Amount: \$$amt', style: const TextStyle(fontSize: 16)),
-            Text('Date: $dateFormatted', style: const TextStyle(fontSize: 16)),
-          ],
-        ),
-        trailing: !isPaid
-            ? IconButton(
-                icon: const Icon(Icons.payment, color: Colors.blueAccent),
-                onPressed: () => _toggleStatus(tx),
-              )
-            : const Icon(Icons.check_circle, color: Colors.green),
-      ),
-    );
-  }
-
-  String _capitalize(String s) =>
-      s.isNotEmpty ? s[0].toUpperCase() + s.substring(1) : s;
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+}
+
+class _CustomerGroupTile extends StatelessWidget {
+  final MapEntry<String, List<Map<String, dynamic>>> group;
+  final Function(Map<String, dynamic>) onStatusToggle;
+
+  const _CustomerGroupTile({
+    required this.group,
+    required this.onStatusToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final customer = group.value.first['customer'] as Map;
+    final customerName = customer['name']?.toString() ?? 'Unknown Customer';
+    final totalQty = group.value.fold<int>(0, (sum, tx) => sum + (tx['quantity'] as int));
+    final totalAmt = group.value.fold<double>(0, (sum, tx) => sum + (tx['amount'] as double));
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+        leading: const Icon(Icons.person_outline, size: 28),
+        title: Text(
+          customerName,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        subtitle: _buildSummary(totalQty, totalAmt),
+        children: group.value.map((tx) => _TransactionItem(
+          transaction: tx,
+          onStatusToggle: () => onStatusToggle(tx),
+        )).toList(),
+      ),
+    );
+  }
+
+  Widget _buildSummary(int qty, double amt) {
+    return Row(
+      children: [
+        _SummaryChip(
+          icon: Icons.water_drop,
+          label: '$qty Gallons',
+          color: Colors.blue.shade100,
+        ),
+        const SizedBox(width: 8),
+        _SummaryChip(
+          icon: Icons.attach_money,
+          label: '\$${amt.toStringAsFixed(2)}',
+          color: Colors.green.shade100,
+        ),
+      ],
+    );
+  }
+}
+
+class _TransactionItem extends StatelessWidget {
+  final Map<String, dynamic> transaction;
+  final VoidCallback onStatusToggle;
+
+  const _TransactionItem({
+    required this.transaction,
+    required this.onStatusToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final status = transaction['status']?.toString().toLowerCase() ?? 'unpaid';
+    final isPaid = status == 'paid';
+    final isDeposit = status == 'deposit';
+    final date = DateTime.tryParse(transaction['created_at']?.toString() ?? '');
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        leading: Icon(
+          isPaid ? Icons.check_circle : 
+                  isDeposit ? Icons.account_balance_wallet : Icons.pending_actions,
+          color: isPaid ? Colors.green : isDeposit ? Colors.purple : Colors.orange,
+        ),
+        title: Text(
+          '${_capitalize(transaction['transaction_type']?.toString() ?? 'Transaction')}',
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              DateFormat('MMM dd, y • h:mm a').format(date ?? DateTime.now()),
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                _InfoPill('Qty: ${transaction['quantity']}'),
+                const SizedBox(width: 8),
+                _InfoPill('Amt: \$${(transaction['amount'] as double).toStringAsFixed(2)}'),
+              ],
+            ),
+          ],
+        ),
+        trailing: !isPaid && !isDeposit
+            ? IconButton(
+                icon: const Icon(Icons.payment, color: Colors.blue),
+                onPressed: onStatusToggle,
+              )
+            : null,
+      ),
+    );
+  }
+
+  String _capitalize(String s) => s.isNotEmpty
+      ? s[0].toUpperCase() + s.substring(1).toLowerCase()
+      : s;
+}
+
+class _SummaryChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _SummaryChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      backgroundColor: color,
+      avatar: Icon(icon, size: 16),
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+class _InfoPill extends StatelessWidget {
+  final String text;
+
+  const _InfoPill(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(text, style: TextStyle(
+        fontSize: 12,
+        color: Colors.grey.shade700,
+      )),
+    );
   }
 }
