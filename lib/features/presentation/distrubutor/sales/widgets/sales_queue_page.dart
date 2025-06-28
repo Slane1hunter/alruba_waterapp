@@ -1,4 +1,6 @@
 import 'package:alruba_waterapp/models/offline_gallon_transaction.dart';
+import 'package:alruba_waterapp/providers/customers_provider.dart';
+import 'package:alruba_waterapp/providers/distributor_sales_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -16,32 +18,50 @@ class SalesQueuePage extends ConsumerStatefulWidget {
 class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
   bool _isSyncing = false;
 
-  Future<void> _syncSales() async {
+  // LBP currency formatter
+  final _lbpFormat = NumberFormat.currency(
+    locale: 'ar_LB',
+    symbol: 'LBP ',
+    decimalDigits: 0,
+  );
+
+    Future<void> _syncSales() async {
+  setState(() {
+    _isSyncing = true;
+  });
+  try {
+    // 1) Grab the local queue before syncing (so we can iterate later)
+    final salesBox = Hive.box<OfflineSale>('offline_sales');
+    // ignore: unused_local_variable
+    final List<OfflineSale> localSales = salesBox.values.toList();
+
+    // 2) Push all offline data (customers, sales, gallons…) to Supabase.
+    //    Your syncOfflineData() should write back `serverId` into each OfflineSale.
+    await OfflineSyncService().syncOfflineData();
+
+    // 3) Refresh any dependent Riverpod providers
+    ref.invalidate(customersProvider);
+    ref.invalidate(distributorSalesProvider);
+    
+
+    // 5) Now that everything is in Supabase, clear the local queue
+    await salesBox.clear();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sync completed successfully!')),
+    );
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Sync failed: $e')),
+    );
+  } finally {
     setState(() {
-      _isSyncing = true;
+      _isSyncing = false;
     });
-    try {
-      // 1) Sync offline data (including customer, sale, and gallon transactions)
-      await OfflineSyncService().syncOfflineData();
-
-      // 3) Clear the offline sales box
-      final salesBox = Hive.box<OfflineSale>('offline_sales');
-      await salesBox.clear();
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sync completed successfully!')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sync failed: $e')),
-      );
-    } finally {
-      setState(() {
-        _isSyncing = false;
-      });
-    }
   }
+}
+
 
   Future<void> _clearQueue() async {
     // Clear both sales and gallon transactions
@@ -102,7 +122,7 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                   children: [
                     const Text('Price/Unit: ',
                         style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text('\$${sale.pricePerUnit.toStringAsFixed(2)}'),
+                    Text(_lbpFormat.format(sale.pricePerUnit)),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -110,7 +130,7 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                   children: [
                     const Text('Total: ',
                         style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text('\$${sale.totalPrice.toStringAsFixed(2)}'),
+                    Text(_lbpFormat.format(sale.totalPrice)),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -217,8 +237,6 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
               ],
             ),
           ),
-          // Unsynced sale count header
-      
           // List of unsynced sales
           Expanded(
             child: ValueListenableBuilder<Box<OfflineSale>>(
@@ -255,10 +273,11 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text(
-                          'Product: $productLabel\nQty: ${sale.quantity} | \$${sale.pricePerUnit.toStringAsFixed(2)}',
+                          'Product: $productLabel\n'
+                          'Qty: ${sale.quantity} | ${_lbpFormat.format(sale.pricePerUnit)}',
                         ),
                         trailing: Text(
-                          '\$${sale.totalPrice.toStringAsFixed(2)}',
+                          _lbpFormat.format(sale.totalPrice),
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         onTap: () => _showSaleDetails(sale),

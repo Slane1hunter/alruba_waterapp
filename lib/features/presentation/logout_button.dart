@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/supabase_service.dart';
 
 class LogoutButton extends ConsumerWidget {
-  const LogoutButton({super.key});
+  const LogoutButton({super.key, required bool fullWidth});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

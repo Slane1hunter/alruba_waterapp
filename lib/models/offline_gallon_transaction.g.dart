@@ -18,36 +18,42 @@ class OfflineGallonTransactionAdapter
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
     return OfflineGallonTransaction(
-      customerId: fields[0] as String?,
-      productId: fields[1] as String?,
-      quantity: fields[2] as int,
-      transactionType: fields[3] as String,
-      status: fields[4] as String?,
-      createdAt: fields[5] as DateTime,
-      amount: fields[6] as double,
-      saleId: fields[7] as String?,
+      localTxId: fields[0] as String,
+      saleLocalId: fields[1] as String,
+      customerId: fields[2] as String?,
+      productId: fields[3] as String?,
+      quantity: fields[4] as int,
+      transactionType: fields[5] as String,
+      status: fields[6] as String?,
+      createdAt: fields[7] as DateTime,
+      amount: fields[8] as double,
+      saleId: fields[9] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, OfflineGallonTransaction obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(10)
       ..writeByte(0)
-      ..write(obj.customerId)
+      ..write(obj.localTxId)
       ..writeByte(1)
-      ..write(obj.productId)
+      ..write(obj.saleLocalId)
       ..writeByte(2)
-      ..write(obj.quantity)
+      ..write(obj.customerId)
       ..writeByte(3)
-      ..write(obj.transactionType)
+      ..write(obj.productId)
       ..writeByte(4)
-      ..write(obj.status)
+      ..write(obj.quantity)
       ..writeByte(5)
-      ..write(obj.createdAt)
+      ..write(obj.transactionType)
       ..writeByte(6)
-      ..write(obj.amount)
+      ..write(obj.status)
       ..writeByte(7)
+      ..write(obj.createdAt)
+      ..writeByte(8)
+      ..write(obj.amount)
+      ..writeByte(9)
       ..write(obj.saleId);
   }
 

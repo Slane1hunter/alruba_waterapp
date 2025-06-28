@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
 
 /// Widget for displaying a dropdown of pre-defined locations.
 class CustomerLocationDropdown extends StatelessWidget {
@@ -40,9 +39,12 @@ class CustomerLocationDropdown extends StatelessWidget {
   }
 }
 
-/// Widget for fetching and displaying the current (exact) location.
+/// Widget for fetching and displaying the current (exact) location entirely offline.
+/// Shows a loading indicator while obtaining GPS fix, then displays latitude/longitude.
 class ExactLocationWidget extends StatefulWidget {
+  /// Called when a new location string is available (lat,lon).
   final ValueChanged<String>? onLocationSelected;
+
   const ExactLocationWidget({super.key, this.onLocationSelected});
 
   @override
@@ -50,18 +52,19 @@ class ExactLocationWidget extends StatefulWidget {
 }
 
 class _ExactLocationWidgetState extends State<ExactLocationWidget> {
-  String? _exactLocation;
   final TextEditingController _exactLocationCtrl = TextEditingController();
+  bool _loading = false;
 
   Future<void> _getCurrentLocation() async {
+    setState(() => _loading = true);
     try {
-      // Check if location services are enabled.
+      // Ensure GPS is enabled
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         throw Exception("Location services are disabled.");
       }
 
-      // Check and request permissions.
+      // Permissions
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -73,34 +76,25 @@ class _ExactLocationWidgetState extends State<ExactLocationWidget> {
         throw Exception("Location permissions are permanently denied.");
       }
 
-      // Use the updated API with LocationSettings.
+      // Get GPS fix
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
         ),
       );
+      final coords =
+          '${position.latitude.toStringAsFixed(6)},${position.longitude.toStringAsFixed(6)}';
 
-      // Reverse geocode to get address details.
-      final placemarks = await placemarkFromCoordinates(
-        position.latitude,
-        position.longitude,
-      );
-      if (placemarks.isNotEmpty) {
-        final placemark = placemarks.first;
-        if (!mounted) return;
-        setState(() {
-          _exactLocation =
-              '${placemark.street}, ${placemark.locality}, ${placemark.country}';
-          _exactLocationCtrl.text = _exactLocation!;
+      if (!mounted) return;
+      setState(() {
+        _exactLocationCtrl.text = coords;
+        _loading = false;
+      });
 
-          // Call parent callback to pass the location up
-          if (widget.onLocationSelected != null) {
-            widget.onLocationSelected!(_exactLocation!);
-          }
-        });
-      }
+      widget.onLocationSelected?.call(coords);
     } catch (e) {
       if (!mounted) return;
+      setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Error getting location: $e"),
@@ -115,24 +109,53 @@ class _ExactLocationWidgetState extends State<ExactLocationWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Button to fetch current location.
         ElevatedButton.icon(
-          icon: const Icon(Icons.my_location),
-          label: const Text('Get Current Location'),
-          onPressed: _getCurrentLocation,
+          icon: _loading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : const Icon(Icons.my_location),
+          label: Text(_loading ? 'Locating...' : 'Get Current Location'),
+          onPressed: _loading ? null : _getCurrentLocation,
         ),
         const SizedBox(height: 16),
-        // Read-only field displaying the exact location.
         TextFormField(
           controller: _exactLocationCtrl,
           readOnly: true,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Exact Location',
             hintText: 'Tap "Get Current Location" to fill this',
-            border: OutlineInputBorder(),
+            border: const OutlineInputBorder(),
+            suffixIcon: _loading
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : null,
           ),
+          validator: (_) {
+            if (_exactLocationCtrl.text.isEmpty) {
+              return 'Please tap to fetch location';
+            }
+            return null;
+          },
         ),
       ],
     );
+  }
+
+  @override
+  void dispose() {
+    _exactLocationCtrl.dispose();
+    super.dispose();
   }
 }

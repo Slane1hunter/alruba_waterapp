@@ -1,81 +1,114 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../constants/app_colors.dart';
-import '../../../constants/app_text_styles.dart';
-import '../../../services/supabase_service.dart';
+import 'package:go_router/go_router.dart';
 
-class SignUpPage extends ConsumerStatefulWidget {
-  const SignUpPage({super.key});
+class SignupPage extends StatefulWidget {
+  const SignupPage({super.key});
 
   @override
-  ConsumerState<SignUpPage> createState() => _SignUpPageState();
+  State<SignupPage> createState() => _SignupPageState();
 }
 
-class _SignUpPageState extends ConsumerState<SignUpPage> {
+class _SignupPageState extends State<SignupPage> {
   final _formKey = GlobalKey<FormState>();
-  final _firstNameController = TextEditingController();
-  final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  String? _selectedRole;
-  bool _isLoading = false;
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  bool _loading = false;
 
-  // Available roles - adjust based on your needs
-  final List<String> _roles = [
-    'owner',
-    'manager',
-    'distributor'
-  ];
+  Future<void> _signUp() async {
+    print('🔄 Starting sign-up process...');
 
-Future<void> _handleSignUp() async {
-  if (!_formKey.currentState!.validate()) return;
-  setState(() => _isLoading = true);
-
-  try {
-    final authResponse = await SupabaseService.client.auth.signUp(
-      email: _emailController.text.trim(),
-      password: _passwordController.text.trim(),
-    );
-
-    if (authResponse.user == null) throw Exception('Signup failed');
-
-    final profileResponse = await SupabaseService.client
-        .from('profiles')
-        .insert({
-          'user_id': authResponse.user!.id,
-          'first_name': _firstNameController.text.trim(),
-          'last_name': _lastNameController.text.trim(),
-          'role': _selectedRole,
-        });
-
-    // Handle potential profile error
-    if (profileResponse.error != null) {
-      // Delete auth user if profile creation fails
-      await SupabaseService.client.auth.admin.deleteUser(authResponse.user!.id);
-      throw Exception('Profile creation failed: ${profileResponse.error!.message}');
+    if (!_formKey.currentState!.validate()) {
+      print('⚠️ Form is invalid');
+      return;
     }
 
-    if (!mounted) return;
-    Navigator.of(context).pop();
-  } on AuthException catch (e) {
-    _showError(e.message);
-  } on PostgrestException catch (e) {
-    _showError('Database error: ${e.message}');
-  } catch (e) {
-    _showError('Unexpected error: ${e.toString()}');
-  } finally {
-    if (mounted) setState(() => _isLoading = false);
-  }
-}
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final firstName = _firstNameController.text.trim();
+    final lastName = _lastNameController.text.trim();
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.error,
-      ),
-    );
+    setState(() => _loading = true);
+
+    try {
+      // Create user account
+      final response = await Supabase.instance.client.auth.signUp(
+        email: email,
+        password: password,
+      );
+
+      final user = response.user;
+      if (user == null) throw Exception('User creation failed');
+      print('✅ Signup success. User ID: ${user.id}');
+
+      // Insert profile using safe method
+      await _insertProfileSafely(
+        userId: user.id,
+        firstName: firstName,
+        lastName: lastName,
+      );
+
+      if (mounted) {
+        print('🚀 Redirecting to /login');
+        context.go('/login');
+      }
+    } catch (e, stackTrace) {
+      print('❌ Signup error: $e');
+      print('🪵 Stack trace:\n$stackTrace');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Signup failed: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _insertProfileSafely({
+    required String userId,
+    required String firstName,
+    required String lastName,
+  }) async {
+    try {
+      // First try normal insert
+      print('🔄 Attempting normal profile insert...');
+      await Supabase.instance.client
+          .from('profiles')
+          .insert({
+            'user_id': userId,
+            'first_name': firstName,
+            'last_name': lastName,
+            'role': 'viewer',
+          })
+          .select()
+          .single();
+          
+      print('✅ Normal profile insert succeeded');
+    } catch (e) {
+      print('⚠️ Normal insert failed: $e');
+      print('🔄 Attempting fallback method...');
+      
+      try {
+        // Use RLS-bypassing function
+        final result = await Supabase.instance.client.rpc(
+          'create_user_profile',
+          params: {
+            'p_user_id': userId,
+            'p_first_name': firstName,
+            'p_last_name': lastName,
+          },
+        );
+        
+        print('✅ Fallback profile insert succeeded: $result');
+      } catch (e2) {
+        print('❌ Fallback also failed: $e2');
+        rethrow;
+      }
+    }
   }
 
   @override
@@ -83,97 +116,44 @@ Future<void> _handleSignUp() async {
     return Scaffold(
       appBar: AppBar(title: const Text('Sign Up')),
       body: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: ListView(
             children: [
               TextFormField(
                 controller: _firstNameController,
-                decoration: const InputDecoration(
-                  labelText: 'First Name',
-                  hintText: 'Enter your first name',
-                ),
-                validator: (value) => value!.isEmpty ? 'Required' : null,
+                decoration: const InputDecoration(labelText: 'First Name'),
+                validator: (val) => val?.isEmpty ?? true ? 'Required' : null,
               ),
-              const SizedBox(height: 16),
               TextFormField(
                 controller: _lastNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Last Name',
-                  hintText: 'Enter your last name',
-                ),
-                validator: (value) => value!.isEmpty ? 'Required' : null,
+                decoration: const InputDecoration(labelText: 'Last Name'),
+                validator: (val) => val?.isEmpty ?? true ? 'Required' : null,
               ),
-              const SizedBox(height: 16),
               TextFormField(
                 controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  hintText: 'Enter your email',
-                ),
-                validator: (value) => 
-                  value!.isEmpty ? 'Required' :
-                  !value.contains('@') ? 'Invalid email' : null,
+                decoration: const InputDecoration(labelText: 'Email'),
                 keyboardType: TextInputType.emailAddress,
+                validator: (val) => val?.isEmpty ?? true ? 'Required' : null,
               ),
-              const SizedBox(height: 16),
               TextFormField(
                 controller: _passwordController,
+                decoration: const InputDecoration(labelText: 'Password'),
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  hintText: 'Enter your password',
-                ),
-                validator: (value) => 
-                  value!.isEmpty ? 'Required' :
-                  value.length < 6 ? 'Minimum 6 characters' : null,
+                validator: (val) => (val?.length ?? 0) < 6 ? 'Min 6 characters' : null,
               ),
-              const SizedBox(height: 24),
-              DropdownButtonFormField<String>(
-                value: _selectedRole,
-                hint: const Text('Select Role'),
-                items: _roles
-                  .map((role) => DropdownMenuItem(
-                        value: role,
-                        child: Text(role.capitalize()), // Add extension method
-                      ))
-                  .toList(),
-                onChanged: (value) => setState(() => _selectedRole = value),
-                validator: (value) => 
-                  value == null ? 'Please select a role' : null,
-              ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: _isLoading ? null : _handleSignUp,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                child: _isLoading 
-                  ? const CircularProgressIndicator()
-                  : const Text('Sign Up', style: AppTextStyles.button),
+                onPressed: _loading ? null : _signUp,
+                child: _loading
+                    ? const CircularProgressIndicator()
+                    : const Text('Create Account'),
               ),
             ],
           ),
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _firstNameController.dispose();
-    _lastNameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-}
-
-// Add this extension for string capitalization
-extension StringExtension on String {
-  String capitalize() {
-    return "${this[0].toUpperCase()}${substring(1)}";
   }
 }

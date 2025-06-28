@@ -17,33 +17,30 @@ class CustomerAdapter extends TypeAdapter<Customer> {
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
     return Customer(
-      localId: fields[0] as String?,
-      remoteId: fields[1] as String?,
-      name: fields[2] as String,
-      phone: fields[3] as String,
-      type: fields[4] as String,
-      locationId: fields[5] as String?,
-      preciseLocation: fields[6] as String?,
+      remoteId: fields[0] as String?,
+      name: fields[1] as String,
+      phone: fields[2] as String,
+      type: fields[3] as String,
+      locationId: fields[4] as String?,
+      preciseLocation: fields[5] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Customer obj) {
     writer
-      ..writeByte(7)
-      ..writeByte(0)
-      ..write(obj.localId)
-      ..writeByte(1)
-      ..write(obj.remoteId)
-      ..writeByte(2)
-      ..write(obj.name)
-      ..writeByte(3)
-      ..write(obj.phone)
-      ..writeByte(4)
-      ..write(obj.type)
-      ..writeByte(5)
-      ..write(obj.locationId)
       ..writeByte(6)
+      ..writeByte(0)
+      ..write(obj.remoteId)
+      ..writeByte(1)
+      ..write(obj.name)
+      ..writeByte(2)
+      ..write(obj.phone)
+      ..writeByte(3)
+      ..write(obj.type)
+      ..writeByte(4)
+      ..write(obj.locationId)
+      ..writeByte(5)
       ..write(obj.preciseLocation);
   }
 

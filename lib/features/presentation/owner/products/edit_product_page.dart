@@ -4,7 +4,6 @@ import 'package:alruba_waterapp/repositories/product_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-
 class EditProductPage extends ConsumerStatefulWidget {
   final Product product;
   const EditProductPage({super.key, required this.product});
@@ -20,6 +19,7 @@ class _EditProductPageState extends ConsumerState<EditProductPage> {
   late TextEditingController _marketPriceController;
   late TextEditingController _productionCostController;
   bool _isLoading = false;
+  late bool _isRefillable;
 
   @override
   void initState() {
@@ -31,6 +31,7 @@ class _EditProductPageState extends ConsumerState<EditProductPage> {
         TextEditingController(text: widget.product.marketPrice.toString());
     _productionCostController =
         TextEditingController(text: widget.product.productionCost.toString());
+    _isRefillable = widget.product.isRefillable;
   }
 
   Future<void> _handleUpdate() async {
@@ -50,10 +51,10 @@ class _EditProductPageState extends ConsumerState<EditProductPage> {
         homePrice: homePrice,
         marketPrice: marketPrice,
         productionCost: productionCost,
+        isRefillable: _isRefillable,
       );
 
       ref.invalidate(productsProvider);
-
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
@@ -125,6 +126,12 @@ class _EditProductPageState extends ConsumerState<EditProductPage> {
                     validator: (val) => double.tryParse(val ?? '') == null
                         ? 'Enter a valid cost'
                         : null,
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    title: const Text('Refillable Container'),
+                    value: _isRefillable,
+                    onChanged: (value) => setState(() => _isRefillable = value),
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(

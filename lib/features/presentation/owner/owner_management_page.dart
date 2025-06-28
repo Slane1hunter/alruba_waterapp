@@ -1,5 +1,8 @@
+// lib/features/presentation/owner/owner_management_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 // Adjust these imports to match your actual file paths:
 import 'package:alruba_waterapp/features/presentation/owner/locations/add_location_page.dart';
@@ -12,6 +15,13 @@ import 'package:alruba_waterapp/providers/location_provider.dart';
 
 import 'package:alruba_waterapp/models/product.dart';
 import 'package:alruba_waterapp/models/location.dart';
+
+/// Shared currency formatter
+final _currencyFormat = NumberFormat.currency(
+  locale: 'en_US',
+  symbol: 'LBP ',
+  decimalDigits: 2,
+);
 
 /// Single page that manages both Products and Locations using tabs + improved UI.
 class OwnerManagementPage extends ConsumerStatefulWidget {
@@ -35,19 +45,15 @@ class _OwnerManagementPageState extends ConsumerState<OwnerManagementPage>
     });
   }
 
-  /// Single FAB that depends on the active tab:
-  /// - Tab 0 => "Add Product"
-  /// - Tab 1 => "Add Location"
+  /// Single FAB that depends on the active tab
   void _handleFabPressed() {
     if (_currentTabIndex == 0) {
-      // Show Add Product bottom sheet
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         builder: (_) => const AddProductPage(),
       );
     } else {
-      // Show Add Location bottom sheet
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -61,7 +67,6 @@ class _OwnerManagementPageState extends ConsumerState<OwnerManagementPage>
     final theme = Theme.of(context);
 
     return Scaffold(
-      // AppBar with tabbed navigation for Products & Locations
       appBar: AppBar(
         title: const Text('Owner Management'),
         centerTitle: true,
@@ -74,8 +79,6 @@ class _OwnerManagementPageState extends ConsumerState<OwnerManagementPage>
           ],
         ),
       ),
-
-      // TabBarView: first tab => products, second => locations
       body: TabBarView(
         controller: _tabController,
         children: const [
@@ -83,14 +86,11 @@ class _OwnerManagementPageState extends ConsumerState<OwnerManagementPage>
           _LocationsTab(),
         ],
       ),
-
-      // A single FAB that changes label based on tab
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _handleFabPressed,
         label: Text(_currentTabIndex == 0 ? 'Add Product' : 'Add Location'),
         icon: const Icon(Icons.add),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }
@@ -103,7 +103,6 @@ class _ProductsTab extends ConsumerWidget {
   const _ProductsTab();
 
   Future<void> _refreshProducts(WidgetRef ref) async {
-    // Pull-to-Refresh: Force reload from DB
     ref.invalidate(productsProvider);
   }
 
@@ -111,7 +110,6 @@ class _ProductsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final productsAsync = ref.watch(productsProvider);
 
-    // Add a RefreshIndicator so user can pull down to refresh
     return RefreshIndicator(
       onRefresh: () => _refreshProducts(ref),
       child: productsAsync.when(
@@ -147,7 +145,7 @@ class _ProductsTab extends ConsumerWidget {
   }
 }
 
-/// Card for each product with an Edit button
+/// Card for each product with an Edit button, prices formatted as "LBP 1,200.00"
 class _ProductCard extends StatelessWidget {
   final Product product;
   const _ProductCard({required this.product});
@@ -184,9 +182,9 @@ class _ProductCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Home Price: \$${p.homePrice.toStringAsFixed(2)}'),
-        Text('Market Price: \$${p.marketPrice.toStringAsFixed(2)}'),
-        Text('Production Cost: \$${p.productionCost.toStringAsFixed(2)}'),
+        Text('Home Price: ${_currencyFormat.format(p.homePrice)}'),
+        Text('Market Price: ${_currencyFormat.format(p.marketPrice)}'),
+        Text('Production Cost: ${_currencyFormat.format(p.productionCost)}'),
       ],
     );
   }
@@ -200,7 +198,6 @@ class _LocationsTab extends ConsumerWidget {
   const _LocationsTab();
 
   Future<void> _refreshLocations(WidgetRef ref) async {
-    // Force re-fetch from DB on pull to refresh
     ref.invalidate(locationsProvider);
   }
 

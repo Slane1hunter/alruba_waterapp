@@ -10,7 +10,8 @@ class CustomerDetailsPage extends ConsumerStatefulWidget {
   const CustomerDetailsPage({super.key});
 
   @override
-  ConsumerState<CustomerDetailsPage> createState() => _CustomerDetailsPageState();
+  ConsumerState<CustomerDetailsPage> createState() =>
+      _CustomerDetailsPageState();
 }
 
 class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
@@ -32,9 +33,21 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
     }
   }
 
-  Future<void> _openMap(String address) async {
-    final query = Uri.encodeComponent(address);
-    final googleMapsUrl = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
+  Future<void> _openMap(dynamic addressRaw) async {
+    final address = addressRaw?.toString().trim();
+
+    if (address == null || address.isEmpty || address.toLowerCase() == 'null') {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No valid address provided')),
+        );
+      }
+      return;
+    }
+
+    final googleMapsUrl = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}');
+
     if (await canLaunchUrl(googleMapsUrl)) {
       await launchUrl(googleMapsUrl);
     } else {
@@ -48,10 +61,12 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
 
   String _getLocationName(String? locationId, List<Location> locations) {
     try {
-      return locations.firstWhere(
-        (loc) => loc.id == locationId,
-        orElse: () => Location(id: '', name: 'Unknown'),
-      ).name;
+      return locations
+          .firstWhere(
+            (loc) => loc.id == locationId,
+            orElse: () => Location(id: '', name: 'Unknown'),
+          )
+          .name;
     } catch (e) {
       return 'Unknown';
     }
@@ -59,7 +74,7 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
 
   Widget _buildFilterSection(ThemeData theme) {
     final locationsAsync = ref.watch(locationsProvider);
-    
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
@@ -77,9 +92,11 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               ),
-              onChanged: (val) => setState(() => _searchText = val.trim().toLowerCase()),
+              onChanged: (val) =>
+                  setState(() => _searchText = val.trim().toLowerCase()),
             ),
             const SizedBox(height: 16),
             Row(
@@ -101,7 +118,8 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
     );
   }
 
-  Widget _buildLocationFilter(AsyncValue<List<Location>> locationsAsync, ThemeData theme) {
+  Widget _buildLocationFilter(
+      AsyncValue<List<Location>> locationsAsync, ThemeData theme) {
     return locationsAsync.when(
       data: (locations) => DropdownButtonFormField<String>(
         isExpanded: true,
@@ -112,9 +130,9 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
             child: Text('All Locations'),
           ),
           ...locations.map((loc) => DropdownMenuItem<String>(
-            value: loc.id,
-            child: Text(loc.name),
-          ))
+                value: loc.id,
+                child: Text(loc.name),
+              ))
         ],
         decoration: InputDecoration(
           labelText: 'Location',
@@ -122,7 +140,8 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
             borderRadius: BorderRadius.circular(10),
           ),
         ),
-        onChanged: (val) => setState(() => _locationFilter = val == 'ALL' ? null : val),
+        onChanged: (val) =>
+            setState(() => _locationFilter = val == 'ALL' ? null : val),
       ),
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, _) => Text('Error: $err'),
@@ -133,24 +152,27 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
     return DropdownButtonFormField<String>(
       isExpanded: true,
       value: _customerTypeFilter ?? 'ALL',
-      items: _customerTypes.map((type) => DropdownMenuItem<String>(
-        value: type,
-        child: Text(type == 'ALL' ? 'All Types' : type.toUpperCase()),
-      )).toList(),
+      items: _customerTypes
+          .map((type) => DropdownMenuItem<String>(
+                value: type,
+                child: Text(type == 'ALL' ? 'All Types' : type.toUpperCase()),
+              ))
+          .toList(),
       decoration: InputDecoration(
         labelText: 'Type',
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
         ),
       ),
-      onChanged: (val) => setState(() => _customerTypeFilter = val == 'ALL' ? null : val),
+      onChanged: (val) =>
+          setState(() => _customerTypeFilter = val == 'ALL' ? null : val),
     );
   }
 
   Widget _buildCustomerCount() {
     final customers = ref.watch(customersProvider).value ?? [];
     final filteredCount = _filterCustomers(customers).length;
-    
+
     return Text(
       '$filteredCount customers found',
       style: TextStyle(
@@ -161,12 +183,16 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
     );
   }
 
-  List<Map<String, dynamic>> _filterCustomers(List<Map<String, dynamic>> customers) {
+  List<Map<String, dynamic>> _filterCustomers(
+      List<Map<String, dynamic>> customers) {
     return customers.where((customer) {
-      if (_locationFilter != null && customer['location_id'] != _locationFilter) return false;
-      if (_customerTypeFilter != null && customer['type'] != _customerTypeFilter) return false;
-      if (_searchText.isNotEmpty && 
-          !(customer['name']?.toString().toLowerCase().contains(_searchText) ?? false)) {
+      if (_locationFilter != null && customer['location_id'] != _locationFilter)
+        return false;
+      if (_customerTypeFilter != null &&
+          customer['type'] != _customerTypeFilter) return false;
+      if (_searchText.isNotEmpty &&
+          !(customer['name']?.toString().toLowerCase().contains(_searchText) ??
+              false)) {
         return false;
       }
       return true;
@@ -176,7 +202,7 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
   Widget _buildCustomerList() {
     final customersAsync = ref.watch(customersProvider);
     final locations = ref.watch(locationsProvider).value ?? [];
-    
+
     return customersAsync.when(
       data: (customers) {
         final filtered = _filterCustomers(customers);
@@ -186,9 +212,11 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
             final customer = filtered[index];
             return _CustomerCard(
               customer: customer,
-              locationName: _getLocationName(customer['location_id'], locations),
+              locationName:
+                  _getLocationName(customer['location_id'], locations),
               onCall: () => _makeCall(customer['phone']),
-              onMap: () => _openMap(customer['address']),
+              onMap: () =>
+                  _openMap(customer['address'] ?? customer['precise_location']),
             );
           },
         );
@@ -231,7 +259,7 @@ class _CustomerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 1,
@@ -261,7 +289,12 @@ class _CustomerCard extends StatelessWidget {
             const SizedBox(height: 8),
             _InfoRow(icon: Icons.location_on, text: locationName),
             const SizedBox(height: 8),
-            _InfoRow(icon: Icons.map, text: customer['address'] ?? 'No address'),
+            _InfoRow(
+              icon: Icons.map,
+              text: customer['address']?.toString().isNotEmpty == true
+                  ? customer['address']
+                  : (customer['precise_location']?.toString() ?? 'No address'),
+            ),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,

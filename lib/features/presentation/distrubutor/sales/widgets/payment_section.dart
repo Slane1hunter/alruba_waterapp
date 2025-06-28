@@ -27,7 +27,8 @@ class PaymentSection extends StatelessWidget {
               ))
           .toList(),
       onChanged: onPaymentStatusChanged,
-      validator: (val) => val == null || val.isEmpty ? 'Please select a payment status' : null,
+      validator: (val) =>
+          val == null || val.isEmpty ? 'Please select a payment status' : null,
     );
   }
 }

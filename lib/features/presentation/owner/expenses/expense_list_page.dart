@@ -1,11 +1,14 @@
+// lib/screens/expenses_screen.dart
+
+import 'package:alruba_waterapp/features/presentation/owner/products/add_product_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_multi_formatter/formatters/formatter_utils.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
 import 'package:intl/intl.dart';
 
 import 'package:alruba_waterapp/models/expense.dart';
 import 'package:alruba_waterapp/providers/expense_provider.dart';
-import 'package:alruba_waterapp/repositories/expense_repository.dart';
 
 class ExpensesScreen extends ConsumerStatefulWidget {
   const ExpensesScreen({super.key});
@@ -16,6 +19,13 @@ class ExpensesScreen extends ConsumerStatefulWidget {
 
 class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   String? _selectedTypeFilter;
+
+  // Single formatter instance
+  final _currencyFormat = NumberFormat.currency(
+    locale: 'en_US',
+    symbol: 'LBP ',
+    decimalDigits: 2,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -105,6 +115,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                   child: _MonthHeader(
                     month: month,
                     expenses: grouped[month]!,
+                    currencyFormat: _currencyFormat,
                   ),
                 ),
               ),
@@ -114,6 +125,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                     final exp = grouped[month]![index];
                     return _ExpenseItem(
                       expense: exp,
+                      currencyFormat: _currencyFormat,
                       onTap: () => _showEditExpenseForm(context, exp),
                       onDelete: () => _deleteExpense(exp),
                     );
@@ -152,7 +164,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
               ...types.map((t) => Padding(
                     padding: const EdgeInsets.only(left: 8),
                     child: ChoiceChip(
-                      label: Text(toBeginningOfSentenceCase(t) ?? t),
+                      label:
+                          Text(toBeginningOfSentenceCase(t) ?? t),
                       selected: _selectedTypeFilter == t,
                       onSelected: (_) =>
                           setState(() => _selectedTypeFilter = t),
@@ -173,7 +186,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     _openExpenseForm(context, exp);
   }
 
-  Future<void> _openExpenseForm(BuildContext context, Expense? expense) {
+  Future<void> _openExpenseForm(
+      BuildContext context, Expense? expense) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -189,11 +203,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
         ),
         child: _ExpenseForm(
           expense: expense,
+          currencyFormat: _currencyFormat,
           onSave: (exp) async {
             if (expense == null) {
               await ref.read(expenseProvider.notifier).addExpense(exp);
             } else {
-              await ref.read(expenseProvider.notifier).updateExpense(exp);
+              await ref
+                  .read(expenseProvider.notifier)
+                  .updateExpense(exp);
             }
             ref.invalidate(expenseTypesProvider);
             if (ctx.mounted) Navigator.pop(ctx);
@@ -211,9 +228,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           content: const Text('Expense deleted'),
           action: SnackBarAction(
             label: 'Undo',
-            onPressed: () => ref
-                .read(expenseProvider.notifier)
-                .addExpense(exp),
+            onPressed: () =>
+                ref.read(expenseProvider.notifier).addExpense(exp),
           ),
         ),
       );
@@ -256,16 +272,18 @@ class _MonthHeader extends StatelessWidget {
   const _MonthHeader({
     required this.month,
     required this.expenses,
+    required this.currencyFormat,
   });
 
   final DateTime month;
   final List<Expense> expenses;
+  final NumberFormat currencyFormat;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final total =
-        expenses.fold<double>(0, (sum, e) => sum + e.amount).toStringAsFixed(2);
+    final totalAmount =
+        expenses.fold<double>(0, (sum, e) => sum + e.amount);
 
     return Container(
       color: theme.scaffoldBackgroundColor,
@@ -276,9 +294,10 @@ class _MonthHeader extends StatelessWidget {
               style: theme.textTheme.titleMedium),
           const Spacer(),
           Chip(
-            label: Text('\$$total'),
+            label: Text(currencyFormat.format(totalAmount)),
             backgroundColor: Colors.green.shade100,
-            avatar: const Icon(Icons.summarize, size: 18, color: Colors.green),
+            avatar: const Icon(Icons.summarize,
+                size: 18, color: Colors.green),
           ),
         ],
       ),
@@ -289,11 +308,13 @@ class _MonthHeader extends StatelessWidget {
 class _ExpenseItem extends StatelessWidget {
   const _ExpenseItem({
     required this.expense,
+    required this.currencyFormat,
     required this.onTap,
     required this.onDelete,
   });
 
   final Expense expense;
+  final NumberFormat currencyFormat;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
@@ -313,7 +334,8 @@ class _ExpenseItem extends StatelessWidget {
         elevation: 2,
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
         child: ListTile(
-          title: Text(toBeginningOfSentenceCase(expense.type) ?? expense.type),
+          title:
+              Text(toBeginningOfSentenceCase(expense.type) ?? expense.type),
           subtitle: Text(
             [
               DateFormat.yMMMd().format(expense.date),
@@ -321,8 +343,10 @@ class _ExpenseItem extends StatelessWidget {
                 expense.description!
             ].join(' • '),
           ),
-          trailing: Text('\$${expense.amount.toStringAsFixed(2)}',
-              style: const TextStyle(fontWeight: FontWeight.w600)),
+          trailing: Text(
+            currencyFormat.format(expense.amount),
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
           onTap: onTap,
         ),
       ),
@@ -330,13 +354,15 @@ class _ExpenseItem extends StatelessWidget {
   }
 }
 
-final expenseTypesProvider = FutureProvider<List<String>>(
-    (ref) => ref.watch(expenseRepositoryProvider).getExpenseTypes());
-
 class _ExpenseForm extends StatefulWidget {
-  const _ExpenseForm({this.expense, required this.onSave});
+  const _ExpenseForm({
+    this.expense,
+    required this.currencyFormat,
+    required this.onSave,
+  });
 
   final Expense? expense;
+  final NumberFormat currencyFormat;
   final void Function(Expense) onSave;
 
   @override
@@ -358,8 +384,9 @@ class _ExpenseFormState extends State<_ExpenseForm> {
     super.initState();
     _type = widget.expense?.type;
     _amountCtrl = TextEditingController(
-        text: widget.expense?.amount.toString() ?? '');
-    _descCtrl = TextEditingController(text: widget.expense?.description ?? '');
+        text: widget.expense?.amount.toStringAsFixed(2) ?? '');
+    _descCtrl =
+        TextEditingController(text: widget.expense?.description ?? '');
     _date = widget.expense?.date ?? DateTime.now();
   }
 
@@ -378,8 +405,11 @@ class _ExpenseFormState extends State<_ExpenseForm> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(widget.expense == null ? 'Add Expense' : 'Edit Expense',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(
+            widget.expense == null ? 'Add Expense' : 'Edit Expense',
+            style: const TextStyle(
+                fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 16),
 
           Consumer(builder: (context, ref, _) {
@@ -420,7 +450,8 @@ class _ExpenseFormState extends State<_ExpenseForm> {
                       }
                     },
                     validator: (_) {
-                      if (!_addingNewType && (_type == null || _type!.isEmpty)) {
+                      if (!_addingNewType &&
+                          (_type == null || _type!.isEmpty)) {
                         return 'Select a type';
                       }
                       return null;
@@ -436,7 +467,8 @@ class _ExpenseFormState extends State<_ExpenseForm> {
                           border: OutlineInputBorder(),
                         ),
                         validator: (v) {
-                          if (_addingNewType && (v == null || v.trim().isEmpty)) {
+                          if (_addingNewType &&
+                              (v == null || v.trim().isEmpty)) {
                             return 'Enter a type';
                           }
                           return null;
@@ -455,12 +487,15 @@ class _ExpenseFormState extends State<_ExpenseForm> {
             decoration: const InputDecoration(
               labelText: 'Amount',
               border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.attach_money),
+              prefixText: 'LBP ',
             ),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [ThousandsFormatter()],
             validator: (v) {
               if (v == null || v.isEmpty) return 'Required';
-              final d = double.tryParse(v);
+              final cleaned = toNumericString(v);
+              final d = double.tryParse(cleaned);
               if (d == null || d <= 0) return 'Invalid';
               return null;
             },
@@ -485,7 +520,8 @@ class _ExpenseFormState extends State<_ExpenseForm> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
-            title: Text('Date: ${DateFormat.yMMMd().format(_date)}'),
+            title:
+                Text('Date: ${DateFormat.yMMMd().format(_date)}'),
             trailing: const Icon(Icons.calendar_today),
             onTap: () async {
               final picked = await showDatePicker(
@@ -502,7 +538,9 @@ class _ExpenseFormState extends State<_ExpenseForm> {
 
           ElevatedButton.icon(
             icon: const Icon(Icons.save),
-            label: Text(widget.expense == null ? 'Add Expense' : 'Save'),
+            label: Text(widget.expense == null
+                ? 'Add Expense'
+                : 'Save'),
             onPressed: _submit,
             style: ElevatedButton.styleFrom(
               minimumSize: const Size(double.infinity, 48),
@@ -516,8 +554,10 @@ class _ExpenseFormState extends State<_ExpenseForm> {
   void _submit() {
     if (!_key.currentState!.validate()) return;
 
-    final typeStr = _addingNewType ? _newTypeCtrl.text.trim() : _type!;
-    final amount = double.parse(_amountCtrl.text);
+    final typeStr =
+        _addingNewType ? _newTypeCtrl.text.trim() : _type!;
+    final raw = toNumericString(_amountCtrl.text);
+    final amount = double.parse(raw);
 
     widget.onSave(
       Expense(
@@ -528,7 +568,8 @@ class _ExpenseFormState extends State<_ExpenseForm> {
         date: _date,
         isRecurring: widget.expense?.isRecurring ?? false,
         recurrenceEnd: widget.expense?.recurrenceEnd,
-        createdAt: widget.expense?.createdAt ?? DateTime.now(),
+        createdAt:
+            widget.expense?.createdAt ?? DateTime.now(),
       ),
     );
   }
