@@ -25,16 +25,16 @@ class _AddLocationPageState extends ConsumerState<AddLocationPage> {
       final repo = ref.read(locationRepositoryProvider);
       await repo.addLocation(name);
 
-      // Force re-fetch
+      // إعادة تحميل المواقع
       ref.invalidate(locationsProvider);
 
       if (!mounted) return;
-      Navigator.pop(context); // close
+      Navigator.pop(context); // إغلاق الشاشة
     } catch (e) {
-      debugPrint('Error adding location: $e');
+      debugPrint('حدث خطأ أثناء إضافة الموقع: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error adding location: $e')),
+          SnackBar(content: Text('حدث خطأ أثناء إضافة الموقع: $e')),
         );
       }
     } finally {
@@ -46,49 +46,52 @@ class _AddLocationPageState extends ConsumerState<AddLocationPage> {
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      maxChildSize: 0.9,
-      builder: (context, scrollController) {
-        return SingleChildScrollView(
-          controller: scrollController,
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 24,
-              bottom: mq.viewInsets.bottom + 24,
-            ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  const Text(
-                    'Add Location',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 24),
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(labelText: 'Location Name'),
-                    validator: (value) =>
-                        (value == null || value.isEmpty)
-                            ? 'Please enter a location name'
-                            : null,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _addLocation,
-                    child: _isLoading
-                        ? const CircularProgressIndicator()
-                        : const Text('Add Location'),
-                  ),
-                ],
+    return Directionality( // لضبط اتجاه النص للعربية
+      textDirection: TextDirection.rtl,
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        builder: (context, scrollController) {
+          return SingleChildScrollView(
+            controller: scrollController,
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 24,
+                bottom: mq.viewInsets.bottom + 24,
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    const Text(
+                      'إضافة موقع جديد',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 24),
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(labelText: 'اسم الموقع'),
+                      validator: (value) =>
+                          (value == null || value.isEmpty)
+                              ? 'الرجاء إدخال اسم الموقع'
+                              : null,
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : _addLocation,
+                      child: _isLoading
+                          ? const CircularProgressIndicator()
+                          : const Text('إضافة الموقع'),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

@@ -1,14 +1,22 @@
-import 'package:alruba_waterapp/features/presentation/owner/owner_management_page.dart';
+
+// lib/features/presentation/manager/manager_home_page.dart
+
+import 'package:alruba_waterapp/features/presentation/logout_button.dart';
+import 'package:alruba_waterapp/providers/manager_slaes_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:alruba_waterapp/features/presentation/distrubutor/sale_form.dart';
+import 'package:alruba_waterapp/features/presentation/manager/manager_cashflow_page.dart';
 import 'package:alruba_waterapp/features/presentation/distrubutor/sales/widgets/sales_queue_page.dart';
 import 'package:alruba_waterapp/features/presentation/manager/gallon_transaction_status_page.dart';
 import 'package:alruba_waterapp/features/presentation/manager/customer_details_page.dart';
-import 'package:alruba_waterapp/features/presentation/manager/manager_profile_page.dart';
 import 'package:alruba_waterapp/features/presentation/manager/manager_dashboard_page.dart';
 
-// Import the new combined page for products/locations (or any page you want to open)
+const _primaryGradient = LinearGradient(
+  colors: [Color(0xFF00695C), Color(0xFF26A69A)],
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+);
 
 class ManagerHomePage extends ConsumerStatefulWidget {
   const ManagerHomePage({super.key});
@@ -25,61 +33,74 @@ class _ManagerHomePageState extends ConsumerState<ManagerHomePage> {
     SalesQueuePage(),
     GallonTransactionStatusPage(),
     CustomerDetailsPage(),
-    ManagerProfilePage(),
+    ManagerCashflowPage(),
   ];
 
-  final List<_NavItem> _navItems = const [
-    _NavItem(icon: Icons.dashboard, label: 'Dashboard'),
-    _NavItem(icon: Icons.queue, label: 'Queue'),
-    _NavItem(icon: Icons.local_drink, label: 'Gallon'),
-    _NavItem(icon: Icons.group, label: 'Customers'),
-    _NavItem(icon: Icons.person, label: 'Profile'),
+  static const _navItems = [
+    _NavItem(icon: Icons.dashboard_outlined, label: 'Dashboard'),
+    _NavItem(icon: Icons.queue_outlined, label: 'Queue'),
+    _NavItem(icon: Icons.local_drink_outlined, label: 'Gallon'),
+    _NavItem(icon: Icons.group_outlined, label: 'Customers'),
+    _NavItem(icon: Icons.attach_money_outlined, label: 'Cashflow'),
   ];
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manager Home'),
+        title: const Text('Manager Home', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 20)),
         centerTitle: true,
+        flexibleSpace: Container(decoration: const BoxDecoration(gradient: _primaryGradient)),
+        elevation: 2,
+         actions: const [LogoutButton(fullWidth: false)],
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
-
-      // FAB now goes to the new combined page (OwnerManagementPage) for demonstration
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 8.0),
-        child: FloatingActionButton.extended(
-          backgroundColor: theme.colorScheme.primary,
-          icon: const Icon(Icons.settings),
-          label: const Text('Manage'),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const OwnerManagementPage(),
-              ),
-            );
-          },
+      body: SafeArea(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+          child: KeyedSubtree(
+            key: ValueKey<int>(_currentIndex),
+            child: _pages[_currentIndex],
+          ),
         ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          final created = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(builder: (_) => const MakeSalePage()),
+          );
+          if (created == true) ref.invalidate(managerSalesProvider);
+        },
+        backgroundColor:const Color(0xFF00695C),
+        elevation: 6,
+        tooltip: 'Add New Sale',
+        child: const Icon(Icons.add, size: 28),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.miniEndFloat,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
+        onTap: (idx) => setState(() => _currentIndex = idx),
         type: BottomNavigationBarType.fixed,
+        backgroundColor: theme.colorScheme.surface,
         selectedItemColor: theme.colorScheme.primary,
-        unselectedItemColor: Colors.grey,
+        unselectedItemColor: theme.colorScheme.onSurface.withOpacity(0.6),
         showUnselectedLabels: true,
-        onTap: (index) => setState(() => _currentIndex = index),
-        items: _navItems.map((navItem) {
+        elevation: 8,
+        items: _navItems.map((item) {
+          final index = _navItems.indexOf(item);
+          final isSelected = index == _currentIndex;
           return BottomNavigationBarItem(
-            icon: Icon(navItem.icon),
-            label: navItem.label,
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isSelected ? theme.colorScheme.primary.withOpacity(0.1) : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(item.icon, size: 24),
+            ),
+            label: item.label,
           );
         }).toList(),
       ),
@@ -92,3 +113,4 @@ class _NavItem {
   final String label;
   const _NavItem({required this.icon, required this.label});
 }
+

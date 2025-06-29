@@ -53,7 +53,8 @@ class DistributorProfilePage extends ConsumerWidget {
                           backgroundColor: Colors.blueAccent,
                           child: Text(
                             user.email?.substring(0, 1).toUpperCase() ?? '',
-                            style: const TextStyle(fontSize: 40, color: Colors.white),
+                            style: const TextStyle(
+                                fontSize: 40, color: Colors.white),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -69,7 +70,9 @@ class DistributorProfilePage extends ConsumerWidget {
                               children: [
                                 Text(
                                   'User Information',
-                                  style: Theme.of(context).textTheme.headlineMedium,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineMedium,
                                 ),
                                 const SizedBox(height: 12),
                                 Row(
@@ -104,7 +107,7 @@ class DistributorProfilePage extends ConsumerWidget {
                         const SizedBox(height: 24),
                         // Logout Button placed at the bottom of the profile page
                         const Center(
-                         child: LogoutButton(),
+                          child: LogoutButton(fullWidth: false),
                         ),
                       ],
                     ),

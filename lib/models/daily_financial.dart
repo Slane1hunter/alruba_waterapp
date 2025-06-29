@@ -1,31 +1,30 @@
-import 'package:intl/intl.dart';
+//import 'package:flutter/foundation.dart';
 
 class DailyFinancial {
   final DateTime date;
-  final double totalRevenue;
+  final double revenue;
+  final double cogs;
+  final double expenses;
   final double grossProfit;
+  final double netProfit;
 
-  const DailyFinancial({
+  DailyFinancial({
     required this.date,
-    required this.totalRevenue,
+    required this.revenue,
+    required this.cogs,
+    required this.expenses,
     required this.grossProfit,
+    required this.netProfit,
   });
 
-  String get monthLabel => DateFormat.yMMM().format(date);
-  String get dateLabel => DateFormat.MMMd().format(date);
-  String get revenueFormatted => NumberFormat.simpleCurrency().format(totalRevenue);
-  String get profitFormatted => NumberFormat.simpleCurrency().format(grossProfit);
+  factory DailyFinancial.fromMap(Map<String, dynamic> m) {
+    return DailyFinancial(
+      date: DateTime.parse(m['date'] as String),
+      revenue: (m['revenue'] as num).toDouble(),
+      cogs: (m['cogs'] as num).toDouble(),
+      expenses: (m['expenses'] as num).toDouble(),
+      grossProfit: (m['gross_profit'] as num).toDouble(),
+      netProfit: (m['net_profit'] as num).toDouble(),
+    );
+  }
 }
-
-
-class MonthlyFinancial {
-  final DateTime month;
-  final List<DailyFinancial> days;
-  double get totalRevenue => days.fold(0, (sum, day) => sum + day.totalRevenue);
-
-  MonthlyFinancial(this.month, this.days);
-
-  String get monthLabel => DateFormat.yMMM().format(month);
-  String get revenueFormatted => NumberFormat.simpleCurrency().format(totalRevenue);
-}
-

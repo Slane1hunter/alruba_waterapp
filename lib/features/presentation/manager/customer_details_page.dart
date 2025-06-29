@@ -1,4 +1,4 @@
-// lib/pages/customer_details_page.dart
+import 'package:alruba_waterapp/features/presentation/manager/edit_customer_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,7 +10,8 @@ class CustomerDetailsPage extends ConsumerStatefulWidget {
   const CustomerDetailsPage({super.key});
 
   @override
-  ConsumerState<CustomerDetailsPage> createState() => _CustomerDetailsPageState();
+  ConsumerState<CustomerDetailsPage> createState() =>
+      _CustomerDetailsPageState();
 }
 
 class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
@@ -26,21 +27,33 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not launch phone dialer')),
+          const SnackBar(content: Text('تعذر فتح تطبيق الهاتف')),
         );
       }
     }
   }
 
-  Future<void> _openMap(String address) async {
-    final query = Uri.encodeComponent(address);
-    final googleMapsUrl = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
+  Future<void> _openMap(dynamic addressRaw) async {
+    final address = addressRaw?.toString().trim();
+
+    if (address == null || address.isEmpty || address.toLowerCase() == 'null') {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لا يوجد عنوان صحيح')),
+        );
+      }
+      return;
+    }
+
+    final googleMapsUrl = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}');
+
     if (await canLaunchUrl(googleMapsUrl)) {
       await launchUrl(googleMapsUrl);
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open Google Maps')),
+          const SnackBar(content: Text('تعذر فتح خرائط Google')),
         );
       }
     }
@@ -48,18 +61,20 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
 
   String _getLocationName(String? locationId, List<Location> locations) {
     try {
-      return locations.firstWhere(
-        (loc) => loc.id == locationId,
-        orElse: () => Location(id: '', name: 'Unknown'),
-      ).name;
+      return locations
+          .firstWhere(
+            (loc) => loc.id == locationId,
+            orElse: () => Location(id: '', name: 'غير معروف'),
+          )
+          .name;
     } catch (e) {
-      return 'Unknown';
+      return 'غير معروف';
     }
   }
 
   Widget _buildFilterSection(ThemeData theme) {
     final locationsAsync = ref.watch(locationsProvider);
-    
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
@@ -71,26 +86,24 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
           children: [
             TextField(
               decoration: InputDecoration(
-                labelText: 'Search',
-                hintText: 'Customer or Product',
+                labelText: 'بحث',
+                hintText: 'الاسم أو المنتج',
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               ),
-              onChanged: (val) => setState(() => _searchText = val.trim().toLowerCase()),
+              onChanged: (val) =>
+                  setState(() => _searchText = val.trim().toLowerCase()),
             ),
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(
-                  child: _buildLocationFilter(locationsAsync, theme),
-                ),
+                Expanded(child: _buildLocationFilter(locationsAsync, theme)),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: _buildCustomerTypeFilter(theme),
-                ),
+                Expanded(child: _buildCustomerTypeFilter(theme)),
               ],
             ),
             const SizedBox(height: 12),
@@ -101,7 +114,8 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
     );
   }
 
-  Widget _buildLocationFilter(AsyncValue<List<Location>> locationsAsync, ThemeData theme) {
+  Widget _buildLocationFilter(
+      AsyncValue<List<Location>> locationsAsync, ThemeData theme) {
     return locationsAsync.when(
       data: (locations) => DropdownButtonFormField<String>(
         isExpanded: true,
@@ -109,23 +123,22 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
         items: [
           const DropdownMenuItem<String>(
             value: 'ALL',
-            child: Text('All Locations'),
+            child: Text('كل المناطق'),
           ),
           ...locations.map((loc) => DropdownMenuItem<String>(
-            value: loc.id,
-            child: Text(loc.name),
-          ))
+                value: loc.id,
+                child: Text(loc.name),
+              ))
         ],
         decoration: InputDecoration(
-          labelText: 'Location',
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+          labelText: 'المنطقة',
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         ),
-        onChanged: (val) => setState(() => _locationFilter = val == 'ALL' ? null : val),
+        onChanged: (val) =>
+            setState(() => _locationFilter = val == 'ALL' ? null : val),
       ),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => Text('Error: $err'),
+      error: (err, _) => Text('خطأ: $err'),
     );
   }
 
@@ -133,26 +146,33 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
     return DropdownButtonFormField<String>(
       isExpanded: true,
       value: _customerTypeFilter ?? 'ALL',
-      items: _customerTypes.map((type) => DropdownMenuItem<String>(
-        value: type,
-        child: Text(type == 'ALL' ? 'All Types' : type.toUpperCase()),
-      )).toList(),
+      items: _customerTypes
+          .map((type) => DropdownMenuItem<String>(
+                value: type,
+                child: Text(
+                  type == 'ALL'
+                      ? 'كل الأنواع'
+                      : type == 'regular'
+                          ? 'عادي'
+                          : 'موزع',
+                ),
+              ))
+          .toList(),
       decoration: InputDecoration(
-        labelText: 'Type',
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        labelText: 'النوع',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
-      onChanged: (val) => setState(() => _customerTypeFilter = val == 'ALL' ? null : val),
+      onChanged: (val) =>
+          setState(() => _customerTypeFilter = val == 'ALL' ? null : val),
     );
   }
 
   Widget _buildCustomerCount() {
     final customers = ref.watch(customersProvider).value ?? [];
     final filteredCount = _filterCustomers(customers).length;
-    
+
     return Text(
-      '$filteredCount customers found',
+      'تم العثور على $filteredCount عميل',
       style: TextStyle(
         fontSize: 14,
         color: Theme.of(context).colorScheme.secondary,
@@ -161,12 +181,19 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
     );
   }
 
-  List<Map<String, dynamic>> _filterCustomers(List<Map<String, dynamic>> customers) {
+  List<Map<String, dynamic>> _filterCustomers(
+      List<Map<String, dynamic>> customers) {
     return customers.where((customer) {
-      if (_locationFilter != null && customer['location_id'] != _locationFilter) return false;
-      if (_customerTypeFilter != null && customer['type'] != _customerTypeFilter) return false;
-      if (_searchText.isNotEmpty && 
-          !(customer['name']?.toString().toLowerCase().contains(_searchText) ?? false)) {
+      if (_locationFilter != null && customer['location_id'] != _locationFilter) {
+        return false;
+      }
+      if (_customerTypeFilter != null &&
+          customer['type'] != _customerTypeFilter) {
+        return false;
+      }
+      if (_searchText.isNotEmpty &&
+          !(customer['name']?.toString().toLowerCase().contains(_searchText) ??
+              false)) {
         return false;
       }
       return true;
@@ -176,25 +203,31 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
   Widget _buildCustomerList() {
     final customersAsync = ref.watch(customersProvider);
     final locations = ref.watch(locationsProvider).value ?? [];
-    
-    return customersAsync.when(
-      data: (customers) {
-        final filtered = _filterCustomers(customers);
-        return ListView.builder(
-          itemCount: filtered.length,
-          itemBuilder: (context, index) {
-            final customer = filtered[index];
-            return _CustomerCard(
-              customer: customer,
-              locationName: _getLocationName(customer['location_id'], locations),
-              onCall: () => _makeCall(customer['phone']),
-              onMap: () => _openMap(customer['address']),
-            );
-          },
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => Center(child: Text('Error: $err')),
+
+    return RefreshIndicator(
+      onRefresh: () => ref.refresh(customersProvider.future),
+      child: customersAsync.when(
+        data: (customers) {
+          final filtered = _filterCustomers(customers);
+          return ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            itemCount: filtered.length,
+            itemBuilder: (context, index) {
+              final customer = filtered[index];
+              return _CustomerCard(
+                customer: customer,
+                locationName:
+                    _getLocationName(customer['location_id'], locations),
+                onCall: () => _makeCall(customer['phone']),
+                onMap: () => _openMap(
+                    customer['address'] ?? customer['precise_location']),
+              );
+            },
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => Center(child: Text('خطأ: $err')),
+      ),
     );
   }
 
@@ -202,7 +235,7 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Customer Details'),
+        title: const Text('تفاصيل العملاء'),
         centerTitle: true,
       ),
       body: NestedScrollView(
@@ -215,7 +248,7 @@ class _CustomerDetailsPageState extends ConsumerState<CustomerDetailsPage> {
   }
 }
 
-class _CustomerCard extends StatelessWidget {
+class _CustomerCard extends ConsumerWidget {
   final Map<String, dynamic> customer;
   final String locationName;
   final VoidCallback onCall;
@@ -229,9 +262,9 @@ class _CustomerCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 1,
@@ -245,37 +278,65 @@ class _CustomerCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  customer['name'] ?? 'Unknown',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  customer['name'] ?? 'غير معروف',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 Chip(
-                  label: Text((customer['type'] ?? 'unknown').toUpperCase()),
-                  backgroundColor: theme.colorScheme.secondary.withOpacity(0.1),
+                  label: Text(
+                    (customer['type'] == 'distributor')
+                        ? 'موزع'
+                        : (customer['type'] == 'regular')
+                            ? 'عادي'
+                            : 'غير معروف',
+                  ),
+                  backgroundColor: theme.colorScheme.secondary.withAlpha(26),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            _InfoRow(icon: Icons.phone, text: customer['phone'] ?? 'N/A'),
+            _InfoRow(icon: Icons.phone, text: customer['phone'] ?? 'غير متوفر'),
             const SizedBox(height: 8),
             _InfoRow(icon: Icons.location_on, text: locationName),
             const SizedBox(height: 8),
-            _InfoRow(icon: Icons.map, text: customer['address'] ?? 'No address'),
+            _InfoRow(
+              icon: Icons.map,
+              text: customer['address']?.toString().isNotEmpty == true
+                  ? customer['address'] as String
+                  : (customer['precise_location']?.toString() ??
+                      'لا يوجد عنوان'),
+            ),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton.icon(
                   icon: const Icon(Icons.call),
-                  label: const Text('Call'),
+                  label: const Text('اتصال'),
                   onPressed: onCall,
                 ),
                 const SizedBox(width: 12),
                 TextButton.icon(
                   icon: const Icon(Icons.map),
-                  label: const Text('Map'),
+                  label: const Text('خريطة'),
                   onPressed: onMap,
+                ),
+                const SizedBox(width: 12),
+                TextButton.icon(
+                  icon: const Icon(Icons.edit),
+                  label: const Text('تعديل'),
+                  onPressed: () async {
+                    final updated = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => EditCustomerPage(customer: customer),
+                      ),
+                    );
+                    
+                    if (updated == true) {
+                      ref.invalidate(customersProvider); // Force refresh
+                    }
+                  },
                 ),
               ],
             ),

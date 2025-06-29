@@ -16,7 +16,7 @@ class OfflineGallonQueue {
 
   static Future<void> addTransaction(OfflineGallonTransaction tx) async {
     final box = await getBox();
-    await box.add(tx);
+    await box.put(tx.localTxId,tx);
     debugPrint("[OfflineGallonQueue] Added transaction. New length: ${box.length}");
   }
 

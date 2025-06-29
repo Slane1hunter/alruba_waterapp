@@ -1,243 +1,233 @@
+//import 'dart:convert';                // for pretty JSON dumps
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/customer.dart';
 import '../models/offline_sale.dart';
-
-// If you're tracking refillable containers offline:
 import '../models/offline_gallon_transaction.dart';
 
 class OfflineSyncService {
-  static const String offlineSalesBoxName = 'offline_sales';
-  static const String localCustomersBoxName = 'offline_customers';
-  static const String offlineGallonTxBoxName = 'offline_gallon_transactions';
+  static const String _offlineSalesBox = 'offline_sales';
+  static const String _localCustomersBox = 'offline_customers';
+  static const String _offlineGallonTxBox = 'offline_gallon_transactions';
 
   final SupabaseClient client = Supabase.instance.client;
 
-
+  /*───────────────────────────────────────────────────────────*/
+  /*  PUBLIC ENTRY                                            */
+  /*───────────────────────────────────────────────────────────*/
   Future<void> syncOfflineData() async {
-    debugPrint("[OfflineSyncService] Starting syncOfflineData");
-
-    // 1) Sync local new customers stored offline
+    debugPrint('[OfflineSync] starting sync …');
     await _syncLocalCustomers();
-
-    // 2) Sync local offline sales
     await _syncOfflineSales();
-
-    // 3) Sync container transactions for refillable items (if using them)
     await _syncGallonTransactions();
+
+    debugPrint('[OfflineSync] finished.');
   }
 
-  // ------------------------------------------------
-  // Step 1: Sync offline customers
-  // ------------------------------------------------
+  /*───────────────────────────────────────────────────────────*/
+  /*  STEP 1 : customers                                      */
+  /*───────────────────────────────────────────────────────────*/
   Future<void> _syncLocalCustomers() async {
-    final customerBox = await Hive.openBox<Customer>(localCustomersBoxName);
+    final box = await Hive.openBox<Customer>(_localCustomersBox);
 
-    for (final key in customerBox.keys) {
-      final localCustomer = customerBox.get(key);
-      if (localCustomer == null) continue;
-
-      debugPrint(
-          "[OfflineSyncService] Syncing customer: ${localCustomer.phone}");
+    for (final key in box.keys) {
+      final c = box.get(key);
+      if (c == null) continue;
 
       try {
-        // Check if this phone already exists in 'customers'
-        final checkResponse = await client
+        final exists = await client
             .from('customers')
             .select('id')
-            .eq('phone', localCustomer.phone)
+            .eq('phone', c.phone)
             .maybeSingle();
 
-        if (checkResponse == null || (checkResponse.isEmpty)) {
-          // Insert a brand-new customer
-          final insertedResponse = await client.from('customers').insert({
-            'name': localCustomer.name,
-            'phone': localCustomer.phone,
-            'type': localCustomer.type,
-            'assigned_to': client.auth.currentUser?.id,
-            'location_id': localCustomer.locationId,
-            'precise_location': localCustomer.preciseLocation,
-          }).maybeSingle();
-
-          if (insertedResponse != null && insertedResponse.isNotEmpty) {
-            final newId = insertedResponse['id'] as String;
-            localCustomer.remoteId = newId;
-            debugPrint(
-                "[OfflineSyncService] Customer inserted with id: $newId");
-            await customerBox.delete(key);
-          } else {
-            debugPrint(
-                "[OfflineSyncService] Error: Insert returned empty (customers).");
-            continue;
-          }
-        } else {
-          // Already exists; store the ID
-          final existingId = (checkResponse as Map)['id'] as String;
-          localCustomer.remoteId = existingId;
-          debugPrint(
-              "[OfflineSyncService] Customer exists with id: $existingId");
-          await customerBox.delete(key);
-        }
-      } catch (e) {
-        debugPrint("[OfflineSyncService] Error syncing customer: $e");
-      }
-    }
-  }
-
-  // ------------------------------------------------
-  // Step 2: Sync offline sales
-  // ------------------------------------------------
-  Future<void> _syncOfflineSales() async {
-    final salesBox = await Hive.openBox<OfflineSale>(offlineSalesBoxName);
-
-    for (final key in salesBox.keys) {
-      final offSale = salesBox.get(key);
-      if (offSale == null) continue;
-
-      try {
-        // If new customer wasn't yet assigned a remote ID, attempt to find/insert them
-        if (offSale.isNewCustomer &&
-            (offSale.existingCustomerId == null ||
-                offSale.existingCustomerId!.isEmpty)) {
-          final phone = offSale.newCustomerPhone;
-          if (phone != null && phone.isNotEmpty) {
-            final custResponse = await client
-                .from('customers')
-                .select('id')
-                .eq('phone', phone)
-                .maybeSingle();
-
-            if (custResponse != null && custResponse.isNotEmpty) {
-              offSale.existingCustomerId =
-                  (custResponse as Map)['id'] as String;
-              debugPrint(
-                  "[OfflineSyncService] Found remote customer ID: ${offSale.existingCustomerId} for phone: $phone");
-            } else {
-              // Insert new customer on the fly
-              final insertedCustomer = await client.from('customers').insert({
-                'name': offSale.customerName,
-                'phone': offSale.newCustomerPhone,
-                'type': 'regular',
-                'assigned_to': client.auth.currentUser?.id,
-                'location_id': offSale.locationId,
-                'precise_location': offSale.preciseLocation,
-              }).maybeSingle();
-
-              if (insertedCustomer != null && insertedCustomer.isNotEmpty) {
-                offSale.existingCustomerId = insertedCustomer['id'] as String;
-                debugPrint(
-                    "[OfflineSyncService] Inserted remote new customer with id: ${offSale.existingCustomerId}");
-              } else {
-                debugPrint(
-                    "[OfflineSyncService] Failed to insert remote new customer. Skipping sale sync.");
-                continue;
-              }
-            }
-          }
-        }
-
-        // debugPrint("[OfflineSyncService] Inserting sale with "
-        //     "customer_id: ${offSale.existingCustomerId}, "
-        //     "product_id: ${offSale.productId}, quantity: ${offSale.quantity}, "
-        //     "price_per_unit: ${offSale.pricePerUnit}, payment_status: ${offSale.paymentStatus.toLowerCase()}, "
-        //     "sold_by: ${offSale.soldBy ?? client.auth.currentUser?.id}, "
-        //     "location_id: ${offSale.locationId ?? _defaultLocationId()}, "
-        //     "created_at: ${offSale.createdAt.toIso8601String()}");
-
-        // CHANGED: add .select('*') to ensure we get a non-empty response
-        final saleInserted = await client
-    .from('sales')
-    .insert({
-      'id': offSale.id, // ✅ manually assigning the offline-generated UUID
-      'customer_id': offSale.existingCustomerId,
-      'product_id': offSale.productId,
-      'quantity': offSale.quantity,
-      'price_per_unit': offSale.pricePerUnit,
-      'payment_status': offSale.paymentStatus.toLowerCase(),
-      'sold_by': offSale.soldBy,
-      'location_id': offSale.locationId,
-      'created_at': offSale.createdAt.toIso8601String(),
-    })
-    .select('*')
-    .maybeSingle();
-
-
-        if (saleInserted != null && saleInserted.isNotEmpty) {
-          debugPrint(
-              "[OfflineSyncService] Sale inserted successfully with id: ${saleInserted['id']}");
-          await salesBox.delete(key);
-        } else {
-          debugPrint(
-              "[OfflineSyncService] Error: Sale insert returned empty or null.");
-        }
-      } catch (e) {
-        debugPrint("[OfflineSyncService] Error syncing sale: $e");
-      }
-    }
-  }
-
-  // ------------------------------------------------
-  // Step 3: Sync container transactions
-  // ------------------------------------------------
-  Future<void> _syncGallonTransactions() async {
-    try {
-      // DELETE THE EXISTING BOX COMPLETELY BEFORE OPENING
-      // await Hive.deleteBoxFromDisk('offline_gallon_transactions');
-
-      // Now safely reopen the box (it will create a fresh new empty box)
-      final containerBox = await Hive.openBox<OfflineGallonTransaction>(
-          'offline_gallon_transactions');
-
-      // Since we have deleted the box from disk, it is empty now
-      // You don't need containerBox.clear() here anymore, remove that line
-
-      // No old records, you can safely continue with the sync logic
-      for (final key in containerBox.keys) {
-        final tx = containerBox.get(key);
-        if (tx == null) continue;
-
-        if (tx.customerId == null ||
-            tx.customerId!.isEmpty ||
-            tx.customerId == 'unknown') {
-          debugPrint(
-              "[OfflineSyncService] Container TX has invalid customer. Skipping...");
-          continue;
-        }
-
-        debugPrint("[OfflineSyncService] Syncing container tx: $tx");
-        try {
+        if (exists == null || exists.isEmpty) {
           final inserted = await client
-              .from('gallon_transactions')
+              .from('customers')
               .insert({
-                'customer_id': tx.customerId,
-                'product_id': tx.productId,
-                'quantity': tx.quantity,
-                'transaction_type': tx.transactionType,
-                'status': tx.status,
-                'amount': tx.amount,
-                'sale_id': tx.saleId,
-                'created_at': tx.createdAt.toIso8601String(),
+                'name': c.name,
+                'phone': c.phone,
+                'type': c.type,
+                'assigned_to': client.auth.currentUser?.id,
+                'location_id': c.locationId,
+                'precise_location': c.preciseLocation,
               })
-              .select('*')
+              .select('id')
               .maybeSingle();
 
           if (inserted != null && inserted.isNotEmpty) {
-            debugPrint(
-                "[OfflineSyncService] Container TX inserted: ${inserted['id']}");
-            await containerBox.delete(key);
-          } else {
-            debugPrint(
-                "[OfflineSyncService] Container TX insert returned empty");
+            c.remoteId = inserted['id'] as String;
+            await box.delete(key);
           }
-        } catch (e) {
-          debugPrint("[OfflineSyncService] Error syncing container TX: $e");
+        } else {
+          c.remoteId = exists['id'] as String;
+          await box.delete(key);
+        }
+      } catch (e) {
+        debugPrint('[OfflineSync] customer-sync error: $e');
+      }
+    }
+  }
+
+  /*───────────────────────────────────────────────────────────*/
+  /*  STEP 2 : sales                                          */
+  /*───────────────────────────────────────────────────────────*/
+  Future<void> _syncOfflineSales() async {
+    final box = await Hive.openBox<OfflineSale>(_offlineSalesBox);
+    final gallonTxBox =
+        await Hive.openBox<OfflineGallonTransaction>(_offlineGallonTxBox);
+
+    final Map<String, String> localToRemoteSaleIds = {};
+
+    for (final key in box.keys) {
+      final sale = box.get(key);
+      if (sale == null) continue;
+
+      try {
+        // 1. Handle customer first
+        if (sale.isNewCustomer && (sale.existingCustomerId?.isEmpty ?? true)) {
+          await _attachOrCreateCustomerForSale(sale);
+        }
+
+        // 2. Insert sale and get generated ID
+        final resp = await client
+            .from('sales')
+            .insert({
+              'customer_id': sale.existingCustomerId!,
+              'product_id': sale.productId,
+              'quantity': sale.quantity,
+              'price_per_unit': sale.pricePerUnit,
+              'payment_status': sale.paymentStatus.toLowerCase(),
+              'sold_by': sale.soldBy,
+              'location_id': sale.locationId,
+              'created_at': sale.createdAt.toIso8601String(),
+            })
+            .select('id')
+            .single();
+
+        if (resp.isNotEmpty) {
+          final remoteSaleId = resp['id'] as String;
+
+          localToRemoteSaleIds[sale.localSaleId!] = remoteSaleId;
+          // 3. Update related gallon transactions
+          final relatedTransactions = gallonTxBox.values
+              .where((tx) => tx.saleLocalId == sale.localSaleId)
+              .toList();
+
+          for (final tx in relatedTransactions) {
+            // Create NEW instance with updated data
+            final updatedTx = OfflineGallonTransaction(
+              localTxId: tx.localTxId, // Keep original key
+              saleLocalId: tx.saleLocalId,
+              customerId: tx.customerId,
+              productId: tx.productId,
+              quantity: tx.quantity,
+              transactionType: tx.transactionType,
+              status: tx.status,
+              amount: tx.amount,
+              saleId: remoteSaleId, // Updated field
+              createdAt: tx.createdAt,
+            );
+
+            // Replace old entry with new instance
+            await gallonTxBox.put(updatedTx.localTxId, updatedTx);
+          }
+
+          // 4. Delete only after processing transactions
+          await box.delete(key);
+          debugPrint('[OfflineSync] sale synced → $remoteSaleId');
+        }
+      } catch (e) {
+        debugPrint('[OfflineSync] sale-sync error: $e');
+      }
+    }
+  }
+
+  /* helper to guarantee customer id */
+  Future<void> _attachOrCreateCustomerForSale(OfflineSale sale) async {
+    final phone = sale.newCustomerPhone;
+    if (phone == null || phone.isEmpty) return;
+
+    final found = await client
+        .from('customers')
+        .select('id')
+        .eq('phone', phone)
+        .maybeSingle();
+
+    if (found != null && found.isNotEmpty) {
+      sale.existingCustomerId = (found['id'] as String?) ?? '';
+      return;
+    }
+
+    final inserted = await client
+        .from('customers')
+        .insert({
+          'name': sale.customerName,
+          'phone': phone,
+          'type': 'regular',
+          'assigned_to': client.auth.currentUser?.id,
+          'location_id': sale.locationId,
+          //'precise_location': sale.preciseLocation,
+        })
+        .select('id')
+        .maybeSingle();
+
+    if (inserted != null && inserted.isNotEmpty) {
+      sale.existingCustomerId = inserted['id'] as String? ?? '';
+    }
+  }
+
+  /*───────────────────────────────────────────────────────────*/
+  /*  STEP 3 : gallon transactions                            */
+  /*───────────────────────────────────────────────────────────*/
+  Future<void> _syncGallonTransactions() async {
+    final box =
+        await Hive.openBox<OfflineGallonTransaction>(_offlineGallonTxBox);
+
+    for (final key in box.keys) {
+      final tx = box.get(key);
+      if (tx == null) continue;
+
+      try {
+        // Validate required fields
+        if ((tx.saleId?.isEmpty ?? true) || (tx.customerId?.isEmpty ?? true)) {
+          debugPrint(
+              '[OfflineSync] Skipping invalid gallon tx: ${tx.localTxId}');
+          continue;
+        }
+
+        final resp = await client
+            .from('gallon_transactions')
+            .insert({
+              'customer_id': tx.customerId,
+              'product_id': tx.productId,
+              'quantity': tx.quantity,
+              'transaction_type': tx.transactionType,
+              'status': tx.status,
+              'amount': tx.amount,
+              'sale_id': tx.saleId,
+              'created_at': tx.createdAt.toIso8601String(),
+            })
+            .select('id')
+            .single();
+
+        if (resp.isNotEmpty) {
+          await box.delete(key);
+          debugPrint('[OfflineSync] gallon-tx synced → ${resp['id']}');
+        }
+      } catch (e) {
+        debugPrint('[OfflineSync] gallon-tx error: $e');
+        // Handle foreign key errors specifically
+        if (e is PostgrestException && e.code == '23503') {
+          debugPrint('''
+            Missing reference for transaction ${tx.localTxId}.
+            Sale ID: ${tx.saleId}
+            Customer ID: ${tx.customerId}
+          ''');
         }
       }
-    } catch (e) {
-      debugPrint(
-          "[OfflineSyncService] Could not open offline_gallon_transactions box: $e");
     }
   }
 }

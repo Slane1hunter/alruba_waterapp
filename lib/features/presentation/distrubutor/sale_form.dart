@@ -18,7 +18,6 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
-
 class MakeSalePage extends ConsumerStatefulWidget {
   const MakeSalePage({super.key});
 
@@ -29,37 +28,31 @@ class MakeSalePage extends ConsumerStatefulWidget {
 class _MakeSalePageState extends ConsumerState<MakeSalePage> {
   final _formKey = GlobalKey<FormState>();
 
-  // ----------------------------
-  // Customer Fields
-  // ----------------------------
+  // ---------------------------- Customer Fields ----------------------------
   bool _isNewCustomer = false;
   String? _existingCustomerId;
   String? _existingCustomerName;
   String? _existingCustomerPhone;
+  String? _existingCustomerLocation;
+
   String? _newCustomerName;
   String? _newCustomerPhone;
-  String? _newCustomerType; // 'distributor' or 'regular'
-  String? _newCustomerLocation; // location ID from dropdown
-  String? _preciseLocation; // from ExactLocationWidget
+  String? _newCustomerType;
+  String? _newCustomerLocation;
+  String? _preciseLocation;
+  
 
   final List<String> _placeholderTypes = ['distributor', 'regular'];
 
-  // ----------------------------
-  // Product & Pricing
-  // ----------------------------
+  // ---------------------------- Product & Pricing ----------------------------
   Product? _selectedProduct;
-  final TextEditingController _priceController =
-      TextEditingController(text: '0.00');
-  final TextEditingController _quantityController =
-      TextEditingController(text: '0');
+  final TextEditingController _priceController = TextEditingController(text: '0.00');
+  final TextEditingController _quantityController = TextEditingController(text: '0');
   double _totalPrice = 0.0;
 
-  // ----------------------------
-  // Payment
-  // ----------------------------
+  // ---------------------------- Payment ----------------------------
   String _paymentStatus = 'Paid';
   List<String> _paymentOptions = ['Paid', 'Unpaid'];
-  // NOTE: _notesController removed as it's not used in the database
 
   @override
   void initState() {
@@ -75,7 +68,6 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
     super.dispose();
   }
 
-  /// Recompute total price based on price and quantity inputs.
   void _updateTotalPrice() {
     final price = double.tryParse(_priceController.text) ?? 0.0;
     final qty = int.tryParse(_quantityController.text) ?? 0;
@@ -84,68 +76,59 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
     });
   }
 
-  /// Auto-fill price based on selected product and customer type.
-  /// Also updates payment options if product is refillable.
   void _autoFillPrice() {
     if (_selectedProduct == null) return;
-    bool isDistributor = false;
-    if (_isNewCustomer) {
-      if (_newCustomerType == 'distributor') {
-        isDistributor = true;
-      }
-    } else {
-      // For existing customers, assume 'regular'
-      isDistributor = false;
-    }
-    final price = isDistributor
-        ? _selectedProduct!.marketPrice
-        : _selectedProduct!.homePrice;
+    final isDist = _isNewCustomer && _newCustomerType == 'distributor';
+    final price = isDist ? _selectedProduct!.marketPrice : _selectedProduct!.homePrice;
     _priceController.text = price.toStringAsFixed(2);
     _updateTotalPrice();
 
-    // Add "Deposit" option if product is refillable.
-    if (_selectedProduct!.isRefillable) {
-      _paymentOptions = ['Paid', 'Unpaid', 'Deposit'];
-    } else {
-      _paymentOptions = ['Paid', 'Unpaid'];
-    }
+    _paymentOptions = _selectedProduct!.isRefillable
+        ? ['Paid', 'Unpaid', 'Deposit']
+        : ['Paid', 'Unpaid'];
     if (!_paymentOptions.contains(_paymentStatus)) {
-      setState(() {
-        _paymentStatus = _paymentOptions.first;
-      });
+      setState(() => _paymentStatus = _paymentOptions.first);
     }
   }
 
-  String _defaultLocationId() {
-    // Replace with an actual valid location id if needed.
-    return '17c1cb39-7b97-494b-be85-bae7290cd54c';
-  }
+  String _defaultLocationId() => '17c1cb39-7b97-494b-be85-bae7290cd54c';
 
-  /// Save sale offline with product and customer details.
   Future<void> _submitFormOffline() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    // Ensure that if not creating a new customer, one is selected.
-    if (!_isNewCustomer && (_existingCustomerId == null || _existingCustomerId!.isEmpty)) {
+    // 1) Block if new customer but precise location not ready
+    if (_isNewCustomer && _preciseLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select an existing customer.')),
+        const SnackBar(content: Text('.يرجى الانتظار حتى يتم تحميل الموقع الدقيق بالكامل')),
+      );
+      return;
+    }
+
+    // 2) Standard form validation
+    if (!_formKey.currentState!.validate()) return;
+    if (!_isNewCustomer &&
+        (_existingCustomerId == null || _existingCustomerId!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('.الرجاء اختيار عميل موجود')),
       );
       return;
     }
 
     _formKey.currentState!.save();
 
+    // 3) Determine locationId
+    final locationId = _isNewCustomer
+        ? (_newCustomerLocation ?? _defaultLocationId())
+        : (_existingCustomerLocation ?? _defaultLocationId());
+
+    // 4) Save new customer locally if needed
     String? customerId;
-    // For new customers, store them offline.
     if (_isNewCustomer) {
       final newLocalCustomer = Customer(
-        name: _newCustomerName ?? "Unknown Customer",
-        phone: _newCustomerPhone ?? "",
-        type: _newCustomerType ?? "regular",
-        locationId: _newCustomerLocation ?? _defaultLocationId(),
+        name: _newCustomerName ?? 'Unknown Customer',
+        phone: _newCustomerPhone ?? '',
+        type: _newCustomerType ?? 'regular',
+        locationId: locationId,
         preciseLocation: _preciseLocation,
       );
-
       final customerBox = await Hive.openBox<Customer>('offline_customers');
       await customerBox.add(newLocalCustomer);
       customerId = null;
@@ -153,52 +136,45 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
       customerId = _existingCustomerId;
     }
 
-    final phoneToStore = _isNewCustomer ? _newCustomerPhone : _existingCustomerPhone;
-    final saleCustomerName = _isNewCustomer ? _newCustomerName : _existingCustomerName;
-    final qty = int.tryParse(_quantityController.text) ?? 0;
-    final price = double.tryParse(_priceController.text) ?? 0.0;
-    final String saleId = const Uuid().v4(); // <- requires uuid package
-
-
+    // 5) Build and queue OfflineSale
+    final saleId = const Uuid().v4();
     final offlineSale = OfflineSale(
       isNewCustomer: _isNewCustomer,
       newCustomerPhone: _isNewCustomer ? _newCustomerPhone : null,
       existingCustomerId: customerId,
-      customerName: saleCustomerName,
-      customerPhone: phoneToStore,
+      customerName: _isNewCustomer ? _newCustomerName : _existingCustomerName,
+      customerPhone: _isNewCustomer ? _newCustomerPhone : _existingCustomerPhone,
       productId: _selectedProduct?.id,
       productName: _selectedProduct?.name,
-      pricePerUnit: price,
-      quantity: qty,
+      pricePerUnit: double.tryParse(_priceController.text) ?? 0.0,
+      quantity: int.tryParse(_quantityController.text) ?? 0,
       totalPrice: _totalPrice,
-      paymentStatus: _paymentStatus, // 'Paid', 'Unpaid', or 'Deposit'
+      paymentStatus: _paymentStatus,
       createdAt: DateTime.now(),
       soldBy: Supabase.instance.client.auth.currentUser?.id ?? 'unknown',
-      locationId: _newCustomerLocation ?? _defaultLocationId(),
-      preciseLocation: _preciseLocation,
-      id: saleId,
+      locationId: locationId,
+      localSaleId: saleId,
     );
 
-    debugPrint("[MakeSalePage] OfflineSale: $offlineSale");
     await OfflineSalesQueue.addSale(offlineSale);
 
-    // If product is refillable, also record container movement.
-    // In sale_form.dart, inside _submitFormOffline()
-
-if (_selectedProduct != null && _selectedProduct!.isRefillable) {
-  final containerTx = OfflineGallonTransaction(
-    customerId: customerId ?? 'unknown',
-    productId: _selectedProduct!.id,
-    quantity: qty,
-    transactionType: _paymentStatus.toLowerCase() == 'deposit' ? 'deposit' : 'purchase',
-    status: _paymentStatus.toLowerCase(),
-    amount: _totalPrice,
-    createdAt: DateTime.now(),
-      saleId: saleId, // 🔹 Attach it here
-  );
-  await OfflineGallonQueue.addTransaction(containerTx);
-}
-
+    // 6) Queue gallon transaction if refillable
+    if (_selectedProduct?.isRefillable == true) {
+      final tx = OfflineGallonTransaction(
+  localTxId: const Uuid().v4(), // Generate new UUID
+  saleLocalId: saleId, // Use the same saleId from OfflineSale
+  customerId: customerId ?? 'unknown',
+  productId: _selectedProduct!.id,
+  quantity: int.tryParse(_quantityController.text) ?? 0,
+  transactionType:
+      _paymentStatus.toLowerCase() == 'deposit' ? 'deposit' : 'purchase',
+  status: _paymentStatus.toLowerCase(),
+  amount: _totalPrice,
+  createdAt: DateTime.now(),
+  saleId: saleId,
+);
+      await OfflineGallonQueue.addTransaction(tx);
+    }
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -209,14 +185,16 @@ if (_selectedProduct != null && _selectedProduct!.isRefillable) {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     final customersAsync = ref.watch(customersProvider);
     ref.watch(productsProvider);
     final locationsAsync = ref.watch(locationsProvider);
 
+    // ➤ Only enable submit if existing customer or precise location ready
+    final canSubmit = !_isNewCustomer || (_preciseLocation != null);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Make a Sale'),
-      ),
+      appBar: AppBar(title: const Text('إجراء بيع')),
       backgroundColor: Colors.grey[100],
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -224,9 +202,7 @@ if (_selectedProduct != null && _selectedProduct!.isRefillable) {
           key: _formKey,
           child: Column(
             children: [
-              // --------------------------------
-              // Customer Card
-              // --------------------------------
+              // ── Customer Info Card ─────────────────────────────────────────────
               Card(
                 elevation: 3,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -236,17 +212,14 @@ if (_selectedProduct != null && _selectedProduct!.isRefillable) {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Switch between New/Existing Customer
+                      // New vs Existing switch
                       Row(
                         children: [
                           const Icon(Icons.person_outline, size: 20),
                           const SizedBox(width: 8),
-                          Text(
-                            'Customer Info',
-                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                          ),
+                          Text('معلومات العميل', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                           const Spacer(),
-                          Text(_isNewCustomer ? 'New' : 'Existing'),
+                          Text(_isNewCustomer ? 'جديد' : 'موجود'),
                           Switch(
                             value: _isNewCustomer,
                             onChanged: (val) {
@@ -254,6 +227,8 @@ if (_selectedProduct != null && _selectedProduct!.isRefillable) {
                                 _isNewCustomer = val;
                                 _existingCustomerId = null;
                                 _existingCustomerName = null;
+                                _existingCustomerPhone = null;
+                                _existingCustomerLocation = null;
                                 _newCustomerName = null;
                                 _newCustomerPhone = null;
                                 _newCustomerType = null;
@@ -265,36 +240,25 @@ if (_selectedProduct != null && _selectedProduct!.isRefillable) {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      // Existing Customer Section (Required Selection)
+
+                      // Existing customer picker
                       if (!_isNewCustomer)
                         customersAsync.when(
                           loading: () => const Center(child: CircularProgressIndicator()),
-                          error: (err, st) => Text('Error: $err'),
-                          data: (customerList) {
-                            final mapped = customerList.map((c) {
-                              return {
-                                'id': c['id'].toString(),
-                                'name': c['name'].toString(),
-                                'phone': c['phone'].toString(),
-                              };
-                            }).toList();
+                          error: (err, _) => Text('Error: $err'),
+                          data: (list) {
+                            final mapped = list.map((c) => {
+                                  'id': c['id'].toString(),
+                                  'name': c['name'].toString(),
+                                  'phone': c['phone'].toString(),
+                                  'locationId': c['location_id'].toString(),
+                                }).toList();
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 ElevatedButton.icon(
                                   icon: const Icon(Icons.people_alt),
-                                  label: Text(_existingCustomerName ?? 'Select Existing Customer'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue[500],
-                                    foregroundColor: Colors.white,
-                                    minimumSize: const Size.fromHeight(48),
-                                    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      side: const BorderSide(color: Colors.grey),
-                                    ),
-                                    elevation: 2,
-                                  ),
+                                  label: Text(_existingCustomerName ?? 'اختر عميلًا موجودًا'),
                                   onPressed: () async {
                                     final chosen = await showModalBottomSheet<Map<String, String>>(
                                       context: context,
@@ -307,6 +271,7 @@ if (_selectedProduct != null && _selectedProduct!.isRefillable) {
                                         _existingCustomerId = chosen['id'];
                                         _existingCustomerName = chosen['name'];
                                         _existingCustomerPhone = chosen['phone'];
+                                        _existingCustomerLocation = chosen['locationId'];
                                       });
                                     }
                                   },
@@ -320,19 +285,12 @@ if (_selectedProduct != null && _selectedProduct!.isRefillable) {
                                     ),
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                     child: Row(
-                                      mainAxisSize: MainAxisSize.min,
                                       children: [
                                         const Icon(Icons.person_pin),
                                         const SizedBox(width: 8),
-                                        Text(
-                                          '$_existingCustomerName',
-                                          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                                        ),
+                                        Text(_existingCustomerName!, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                                         const SizedBox(width: 8),
-                                        Text(
-                                          '($_existingCustomerPhone)',
-                                          style: theme.textTheme.bodySmall,
-                                        ),
+                                        Text('(${_existingCustomerPhone!})', style: theme.textTheme.bodySmall),
                                       ],
                                     ),
                                   ),
@@ -340,82 +298,67 @@ if (_selectedProduct != null && _selectedProduct!.isRefillable) {
                             );
                           },
                         ),
-                      // New Customer Section
+
+                      // New customer inputs
                       if (_isNewCustomer) ...[
                         TextFormField(
                           decoration: const InputDecoration(
-                            labelText: 'Full Name (Optional)',
+                            labelText: 'الاسم الكامل',
                             prefixIcon: Icon(Icons.person_outline),
                             border: OutlineInputBorder(),
                           ),
-                          onSaved: (val) => _newCustomerName = val,
+                          onSaved: (v) => _newCustomerName = v,
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
                           decoration: const InputDecoration(
-                            labelText: 'Phone Number',
+                            labelText: 'رقم الهاتف',
                             prefixIcon: Icon(Icons.phone),
                             border: OutlineInputBorder(),
                           ),
                           keyboardType: TextInputType.phone,
-                          onSaved: (val) => _newCustomerPhone = val,
-                          validator: (val) => val == null || val.isEmpty ? 'Enter phone' : null,
+                          onSaved: (v) => _newCustomerPhone = v,
+                          validator: (v) => v == null || v.isEmpty ? 'أدخل رقم الهاتف' : null,
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<String>(
                           decoration: const InputDecoration(
-                            labelText: 'Customer Type',
+                            labelText: 'نوع العميل',
                             border: OutlineInputBorder(),
                           ),
                           value: _newCustomerType,
-                          items: _placeholderTypes.map((type) {
-                            return DropdownMenuItem(
-                              value: type,
-                              child: Text(type),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
+                          items: _placeholderTypes
+                              .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+                              .toList(),
+                          onChanged: (v) {
                             setState(() {
-                              _newCustomerType = val;
+                              _newCustomerType = v;
                               _autoFillPrice();
                             });
                           },
-                          validator: (val) => val == null ? 'Please select a type' : null,
+                          validator: (v) => v == null ? 'الرجاء اختيار نوع' : null,
                         ),
                         const SizedBox(height: 16),
                         locationsAsync.when(
                           loading: () => const Center(child: CircularProgressIndicator()),
-                          error: (err, st) => Text('Error: $err'),
-                          data: (locList) {
-                            final mappedLocs = locList.map((loc) {
-                              return {
-                                'id': loc.id,
-                                'name': loc.name.toString(),
-                              };
-                            }).toList();
-                            return CustomerLocationDropdown(
-                              selectedLocation: _newCustomerLocation,
-                              onLocationChanged: (val) => setState(() => _newCustomerLocation = val),
-                              locations: List<Map<String, String>>.from(mappedLocs),
-                            );
-                          },
+                          error: (err, _) => Text('Error: $err'),
+                          data: (locList) => CustomerLocationDropdown(
+                            selectedLocation: _newCustomerLocation,
+                            onLocationChanged: (v) => setState(() => _newCustomerLocation = v),
+                            locations: locList.map((loc) => {'id': loc.id, 'name': loc.name}).toList(),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         ExactLocationWidget(
-                          onLocationSelected: (val) {
-                            setState(() {
-                              _preciseLocation = val;
-                            });
-                          },
+                          onLocationSelected: (val) => setState(() => _preciseLocation = val),
                         ),
                       ],
                     ],
                   ),
                 ),
               ),
-              // --------------------------------
-              // Product & Pricing Card
-              // --------------------------------
+
+              // ── Product & Pricing Card ──────────────────────────────────────────
               Card(
                 elevation: 3,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -425,200 +368,167 @@ if (_selectedProduct != null && _selectedProduct!.isRefillable) {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.shopping_bag_outlined, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Product & Pricing',
-                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
+                      Row(children: [
+                        const Icon(Icons.shopping_bag_outlined, size: 20),
+                        const SizedBox(width: 8),
+                        Text('المنتج والتسعير', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      ]),
                       const SizedBox(height: 16),
                       ref.watch(productsProvider).when(
                         loading: () => const Center(child: CircularProgressIndicator()),
-                        error: (err, st) => Text('Product Error: $err'),
-                        data: (prodList) {
-                          final typed = prodList;
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ProductDropdown(
-                                selectedProduct: _selectedProduct,
-                                onProductChanged: (prod) {
-                                  setState(() {
-                                    _selectedProduct = prod;
-                                    _autoFillPrice();
-                                  });
-                                },
-                                products: typed,
-                              ),
-                              const SizedBox(height: 24),
-                              PricingSection(
-                                priceController: _priceController,
-                                quantityController: _quantityController,
-                                totalPrice: _totalPrice,
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              // --------------------------------
-              // Payment Card
-              // --------------------------------
-              Card(
-                elevation: 3,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                margin: const EdgeInsets.only(bottom: 16),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.payment_outlined, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Payment Details',
-                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      PaymentSection(
-                        paymentStatus: _paymentStatus,
-                        onPaymentStatusChanged: (val) => setState(() => _paymentStatus = val ?? 'Paid'),
-                        paymentOptions: _paymentOptions,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              // --------------------------------
-              // Submit Button
-              // --------------------------------
-              SaleFormSubmitButton(
-                onPressed: _submitFormOffline,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+                        error: (err, _) => Text('خطأ في المنتج: $err'),
+                        data: (prodList) => Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ProductDropdown(
+                              selectedProduct: _selectedProduct,
+                              onProductChanged: (prod) {
+                                setState(() {
+                                  _selectedProduct = prod;
+                                  _autoFillPrice();
+                                });
+                              },
+                              products: prodList,
+                            ),
+                            const SizedBox(height: 24),
+                            PricingSection(
+                              priceController: _priceController,
+                              quantityController: _quantityController,
+                              totalPrice: _totalPrice,
+                            ),
+                          ],
+                        ),  
+                      ),  
+                    ],  
+                  ),  
+                ),  
+              ),  
 
-// ---------------------------------------------------------------
-// Bottom Sheet for Customer Search
-// ---------------------------------------------------------------
-class _CustomerSearchSheet extends StatefulWidget {
-  final List<Map<String, String>> customers;
-  const _CustomerSearchSheet({required this.customers});
+              // ── Payment Card ─────────────────────────────────────────────────────  
+              Card(  
+                elevation: 3,  
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),  
+                margin: const EdgeInsets.only(bottom: 16),  
+                child: Padding(  
+                  padding: const EdgeInsets.all(16),  
+                  child: Column(  
+                    crossAxisAlignment: CrossAxisAlignment.start,  
+                    children: [  
+                      Row(children: [  
+                        const Icon(Icons.payment_outlined, size: 20),  
+                        const SizedBox(width: 8),  
+                        Text('تفاصيل الدفع', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),  
+                      ]),  
+                      const SizedBox(height: 16),  
+                      PaymentSection(  
+                        paymentStatus: _paymentStatus,  
+                        onPaymentStatusChanged: (val) => setState(() => _paymentStatus = val ?? 'Paid'),  
+                        paymentOptions: _paymentOptions,  
+                      ),  
+                    ],  
+                  ),  
+                ),  
+              ),  
 
-  @override
-  State<_CustomerSearchSheet> createState() => _CustomerSearchSheetState();
-}
+              // ── Submit Button ───────────────────────────────────────────────────  
+              SaleFormSubmitButton(  
+                onPressed: canSubmit  
+                    ? _submitFormOffline  
+                    : () {  
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(  
+                          content: Text('يرجى الانتظار حتى يتم تحميل الموقع الدقيق بالكامل.'),  
+                        ));  
+                      },  
+              ),  
+            ],  
+          ),  
+        ),  
+      ),  
+    );  
+  }  
+}  
 
-class _CustomerSearchSheetState extends State<_CustomerSearchSheet> {
-  final TextEditingController _searchCtrl = TextEditingController();
-  late List<Map<String, String>> _filteredCustomers;
-
-  @override
-  void initState() {
-    super.initState();
-    _filteredCustomers = widget.customers;
-    _searchCtrl.addListener(_filterList);
-  }
-
-  void _filterList() {
-    final query = _searchCtrl.text.trim().toLowerCase();
-    setState(() {
-      _filteredCustomers = query.isEmpty
-          ? widget.customers
-          : widget.customers.where((c) {
-              final name = c['name']!.toLowerCase();
-              return name.contains(query);
-            }).toList();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return DraggableScrollableSheet(
-      initialChildSize: 0.5,
-      minChildSize: 0.3,
-      maxChildSize: 0.9,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(24),
-              topRight: Radius.circular(24),
-            ),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[400],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Select a Customer',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  controller: _searchCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Search Customer',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  itemCount: _filteredCustomers.length,
-                  itemBuilder: (ctx, i) {
-                    final cust = _filteredCustomers[i];
-                    return ListTile(
-                      title: Text(cust['name']!),
-                      subtitle: Text(cust['phone'] ?? ''),
-                      onTap: () {
-                        Navigator.pop(context, cust);
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-}
+// ── Bottom sheet for selecting existing customer ─────────────────────────────  
+class _CustomerSearchSheet extends StatefulWidget {  
+  final List<Map<String, String>> customers;  
+  const _CustomerSearchSheet({required this.customers});  
+  
+  @override  
+  State<_CustomerSearchSheet> createState() => _CustomerSearchSheetState();  
+}  
+  
+class _CustomerSearchSheetState extends State<_CustomerSearchSheet> {  
+  final TextEditingController _searchCtrl = TextEditingController();  
+  late List<Map<String, String>> _filteredCustomers;  
+  
+  @override  
+  void initState() {  
+    super.initState();  
+    _filteredCustomers = widget.customers;  
+    _searchCtrl.addListener(_filterList);  
+  }  
+  
+  void _filterList() {  
+    final q = _searchCtrl.text.trim().toLowerCase();  
+    setState(() {  
+      _filteredCustomers = q.isEmpty  
+          ? widget.customers  
+          : widget.customers.where((c) => c['name']!.toLowerCase().contains(q)).toList();  
+    });  
+  }  
+  
+  @override  
+  Widget build(BuildContext context) {  
+    final theme = Theme.of(context);  
+    return DraggableScrollableSheet(  
+      initialChildSize: 0.5,  
+      minChildSize: 0.3,  
+      maxChildSize: 0.9,  
+      builder: (ctx, scrollController) {  
+        return Container(  
+          decoration: BoxDecoration(  
+            color: theme.colorScheme.surface,  
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),  
+          ),  
+          child: Column(  
+            children: [  
+              const SizedBox(height: 12),  
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(2))),  
+              const SizedBox(height: 12),  
+              Text('اختر عميلًا', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),  
+              const SizedBox(height: 16),  
+              Padding(  
+                padding: const EdgeInsets.symmetric(horizontal: 16),  
+                child: TextField(  
+                  controller: _searchCtrl,  
+                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'ابحث عن العميل', border: OutlineInputBorder()),  
+                ),  
+              ),  
+              const SizedBox(height: 8),  
+              Expanded(  
+                child: ListView.builder(  
+                  controller: scrollController,  
+                  itemCount: _filteredCustomers.length,  
+                  itemBuilder: (context, i) {  
+                    final cust = _filteredCustomers[i];  
+                    return ListTile(  
+                      title: Text(cust['name']!),  
+                      subtitle: Text(cust['phone']!),  
+                      onTap: () => Navigator.pop(context, cust),  
+                    );  
+                  },  
+                ),  
+              ),  
+            ],  
+          ),  
+        );  
+      },  
+    );  
+  }  
+  
+  @override  
+  void dispose() {  
+    _searchCtrl.dispose();  
+    super.dispose();  
+  }  
+}  

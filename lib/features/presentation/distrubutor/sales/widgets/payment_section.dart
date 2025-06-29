@@ -16,18 +16,19 @@ class PaymentSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
       decoration: const InputDecoration(
-        labelText: 'Payment Status',
+        labelText: 'حالة الدفع',
         border: OutlineInputBorder(),
       ),
       value: paymentStatus,
       items: paymentOptions
           .map((option) => DropdownMenuItem(
                 value: option,
-                child: Text(option),
+                child: Text(option), // Note: If options are in English, translate them too.
               ))
           .toList(),
       onChanged: onPaymentStatusChanged,
-      validator: (val) => val == null || val.isEmpty ? 'Please select a payment status' : null,
+      validator: (val) =>
+          val == null || val.isEmpty ? 'يرجى اختيار حالة الدفع' : null,
     );
   }
 }

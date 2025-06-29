@@ -5,30 +5,38 @@ part 'offline_gallon_transaction.g.dart';
 @HiveType(typeId: 5)
 class OfflineGallonTransaction extends HiveObject {
   @HiveField(0)
-  String? customerId;
+  final String localTxId; // Required for Hive operations
 
   @HiveField(1)
-  String? productId;
+  final String saleLocalId; // Reference to local sale ID
 
   @HiveField(2)
-  int quantity;
+  String? customerId;
 
   @HiveField(3)
-  String transactionType;
+  String? productId;
 
   @HiveField(4)
-  String? status;
+  int quantity;
 
   @HiveField(5)
-  DateTime createdAt;
+  String transactionType;
 
   @HiveField(6)
+  String? status;
+
+  @HiveField(7)
+  DateTime createdAt;
+
+  @HiveField(8)
   double amount;
 
-  @HiveField(7) // 🔹 NEW FIELD
-  String? saleId;
+  @HiveField(9)
+  String? saleId; // Will be populated after sync
 
   OfflineGallonTransaction({
+    required this.localTxId,        // Made required
+    required this.saleLocalId,      // Made required
     this.customerId,
     this.productId,
     required this.quantity,
