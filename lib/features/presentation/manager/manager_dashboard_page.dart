@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' show DateFormat, NumberFormat;
+//import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:alruba_waterapp/services/supabase_service.dart';
@@ -32,7 +33,7 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
   final TextEditingController _searchCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
   final _lbp =
-      NumberFormat.currency(locale: 'ar_LB', symbol: 'LBP ', decimalDigits: 0);
+      NumberFormat.currency(locale: 'ar_LB', symbol: 'ل.ل ', decimalDigits: 0);
 
   static const _columns = '''
     id, created_at, quantity, price_per_unit, total_amount, payment_status, payment_date,
@@ -90,7 +91,6 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
 
       final locationMatch = _locationFilter == null ||
           sale['location']['name']?.toString() == _locationFilter;
-
       final sellerMatch =
           _soldByFilter == null || sale['sold_by'] == _soldByFilter;
 
@@ -101,23 +101,27 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sales  Dashboard Manager'),
-        centerTitle: true,
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async => setState(() {}),
-        child: CustomScrollView(
-          controller: _scrollCtrl,
-          slivers: [
-            SliverAppBar(
-              pinned: true,
-              expandedHeight: 260,
-              flexibleSpace: FlexibleSpaceBar(background: _buildFilters(theme)),
-            ),
-            _buildSales(theme),
-          ],
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('لوحة مبيعات'),
+          centerTitle: true,
+        ),
+        body: RefreshIndicator(
+          onRefresh: () async => setState(() {}),
+          child: CustomScrollView(
+            controller: _scrollCtrl,
+            slivers: [
+              SliverAppBar(
+                pinned: true,
+                expandedHeight: 260,
+                flexibleSpace:
+                    FlexibleSpaceBar(background: _buildFilters(theme)),
+              ),
+              _buildSales(theme),
+            ],
+          ),
         ),
       ),
     );
@@ -128,15 +132,14 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
           color: t.colorScheme.surface,
           borderRadius:
               const BorderRadius.vertical(bottom: Radius.circular(20)),
-        ), // Added missing closing parenthesis here
-        padding: const EdgeInsets.all(16), // This is now valid on Container
+        ),
+        padding: const EdgeInsets.all(16),
         child: Column(
-          // Valid child parameter for Container
           children: [
             TextField(
               controller: _searchCtrl,
               decoration: InputDecoration(
-                hintText: 'Search by customer or product…',
+                hintText: 'بحث عن العميل أو المنتج...',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.clear),
@@ -154,8 +157,8 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
             ListTile(
               leading: Icon(Icons.calendar_month, color: t.colorScheme.primary),
               title: Text(_startDate != null && _endDate != null
-                  ? '${DateFormat('MMM dd').format(_startDate!)} - ${DateFormat('MMM dd').format(_endDate!)}'
-                  : 'Select Date Range'),
+                  ? '${DateFormat('dd MMM', 'ar').format(_startDate!)} - ${DateFormat('dd MMM', 'ar').format(_endDate!)}'
+                  : 'اختر نطاق التاريخ'),
               trailing: const Icon(Icons.arrow_drop_down),
               tileColor: t.colorScheme.surfaceContainerHighest,
               onTap: _pickDateRange,
@@ -172,7 +175,7 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
 
   Widget _buildLocationDrop(ThemeData t) => ref.watch(locationsProvider).when(
         data: (locs) => _FilterDrop<String>(
-          hint: 'All locations',
+          hint: 'كل المواقع',
           items: locs.map((e) => e.name).toList(),
           value: _locationFilter,
           onChanged: (v) => setState(() => _locationFilter = v),
@@ -181,7 +184,7 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) =>
-            Text('Error: $e', style: TextStyle(color: t.colorScheme.error)),
+            Text('خطأ: $e', style: TextStyle(color: t.colorScheme.error)),
       );
 
   Widget _buildSellerDrop(ThemeData t) => FutureBuilder(
@@ -192,12 +195,12 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
         builder: (ctx, snap) {
           final list = snap.data ?? [];
           return _FilterDrop<String>(
-            hint: 'All sellers',
+            hint: 'كل البائعين',
             items: list.map((s) => s['user_id'].toString()).toList(),
             value: _soldByFilter,
             display: (v) {
               final seller = list.firstWhere((s) => s['user_id'] == v,
-                  orElse: () => {'first_name': 'All', 'last_name': ''});
+                  orElse: () => {'first_name': 'الكل', 'last_name': ''});
               return '${seller['first_name']} ${seller['last_name']}';
             },
             onChanged: (v) => setState(() => _soldByFilter = v),
@@ -210,6 +213,7 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
   Future<void> _pickDateRange() async {
     final range = await showDateRangePicker(
       context: context,
+      locale: const Locale('ar'), // 👈 Force Arabic
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 365)),
       initialDateRange: DateTimeRange(start: _startDate!, end: _endDate!),
@@ -231,25 +235,19 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
           }
           if (snap.hasError) {
             return SliverFillRemaining(
-                child: Center(child: Text('Error: ${snap.error}')));
+                child: Center(child: Text('خطأ: ${snap.error}')));
           }
 
           final eventsByDay = <String, List<_DayEvent>>{};
           for (final sale in snap.data!) {
             final saleDate = DateTime.parse(sale['created_at']).toLocal();
             final saleKey = DateFormat('yyyy-MM-dd').format(saleDate);
-
-            // Add sale event
             eventsByDay
                 .putIfAbsent(saleKey, () => [])
                 .add(_DayEvent(sale, saleDate, false));
-
-            // Only add payment if it exists and is on a different day
             if (sale['payment_date'] != null) {
               final paymentDate =
                   DateTime.parse(sale['payment_date']).toLocal();
-
-              // Use helper function to compare dates
               if (!_isSameDay(saleDate, paymentDate)) {
                 final paymentKey = DateFormat('yyyy-MM-dd').format(paymentDate);
                 eventsByDay
@@ -272,8 +270,7 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: ExpansionTile(
                     iconColor: t.colorScheme.primary,
-                    title: Text(DateFormat('MMM dd, yyyy')
-                        .format(DateTime.parse(days[i]))),
+                    title: Text(DateFormat('dd MMM yyyy', 'ar').format(DateTime.parse(days[i]))),
                     children:
                         dayEvents.map((e) => _buildEventTile(e, t)).toList(),
                   ),
@@ -285,17 +282,15 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
         },
       );
 
-// Helper function to compare dates (ignoring time)
-  bool _isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
-  }
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   Widget _buildEventTile(_DayEvent event, ThemeData t) {
     if (event.isPayment) {
       return ListTile(
         leading: const Icon(Icons.attach_money, color: Colors.green),
         title: Text(
-            'Payment for sale on ${DateFormat('MMM dd').format(DateTime.parse(event.sale['created_at']).toLocal())}'),
+            'دفعة لعملية بيع بتاريخ ${DateFormat('MMM dd').format(DateTime.parse(event.sale['created_at']).toLocal())}'),
         subtitle: Text(
             '${event.sale['customer']['name']} • ${_lbp.format(event.sale['total_amount'])}'),
         trailing: Text(DateFormat('HH:mm').format(event.time)),
@@ -328,9 +323,9 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-              '${event.sale['product']['name']} • Qty: ${event.sale['quantity']}'),
+              '${event.sale['product']['name']} • الكمية: ${event.sale['quantity']}'),
           Text(
-              'Sold by: ${event.sale['seller']['first_name']} ${event.sale['seller']['last_name']}'),
+              'تم البيع بواسطة: ${event.sale['seller']['first_name']} ${event.sale['seller']['last_name']}'),
         ],
       ),
       trailing: Column(
@@ -349,33 +344,32 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Sale Details'),
+        title: const Text('تفاصيل البيع'),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Customer: ${sale['customer']['name']}',
+              Text('العميل: ${sale['customer']['name']}',
                   style: t.textTheme.titleMedium),
               const SizedBox(height: 8),
-              Text('Product: ${sale['product']['name']}'),
-              Text('Quantity: ${sale['quantity']}'),
-              Text('Total: ${_lbp.format(sale['total_amount'])}'),
+              Text('المنتج: ${sale['product']['name']}'),
+              Text('الكمية: ${sale['quantity']}'),
+              Text('الإجمالي: ${_lbp.format(sale['total_amount'])}'),
               Text(
-                  'Status: ${(sale['payment_status'] as String).toUpperCase()}'),
+                  'الحالة: ${(sale['payment_status'] as String).toUpperCase()}'),
               if (sale['payment_date'] != null)
                 Text(
-                    'Paid on: ${DateFormat('MMM dd, HH:mm').format(DateTime.parse(sale['payment_date']).toLocal())}'),
+                    'تم الدفع في: ${DateFormat('MMM dd, HH:mm').format(DateTime.parse(sale['payment_date']).toLocal())}'),
               const SizedBox(height: 16),
-              Text('Location: ${sale['location']['name']}'),
+              Text('الموقع: ${sale['location']['name']}'),
               Text(
-                  'Sold by: ${sale['seller']['first_name']} ${sale['seller']['last_name']}'
-                  ),
+                  'تم البيع بواسطة: ${sale['seller']['first_name']} ${sale['seller']['last_name']}'),
               if (sale['customer']['phone']?.isNotEmpty == true)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.call),
-                    label: const Text('Call Customer'),
+                    label: const Text('اتصل بالعميل'),
                     onPressed: () => launchUrl(
                         Uri(scheme: 'tel', path: sale['customer']['phone'])),
                   ),
@@ -385,7 +379,7 @@ class _ManagerDashboardPageState extends ConsumerState<ManagerDashboardPage> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق')),
         ],
       ),
     );

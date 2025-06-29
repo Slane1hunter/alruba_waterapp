@@ -33,7 +33,6 @@ class _SignupPageState extends State<SignupPage> {
     setState(() => _loading = true);
 
     try {
-      // Create user account
       final response = await Supabase.instance.client.auth.signUp(
         email: email,
         password: password,
@@ -43,7 +42,6 @@ class _SignupPageState extends State<SignupPage> {
       if (user == null) throw Exception('User creation failed');
       print('✅ Signup success. User ID: ${user.id}');
 
-      // Insert profile using safe method
       await _insertProfileSafely(
         userId: user.id,
         firstName: firstName,
@@ -57,10 +55,10 @@ class _SignupPageState extends State<SignupPage> {
     } catch (e, stackTrace) {
       print('❌ Signup error: $e');
       print('🪵 Stack trace:\n$stackTrace');
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Signup failed: ${e.toString()}')),
+          SnackBar(content: Text('فشل إنشاء الحساب: ${e.toString()}')),
         );
       }
     } finally {
@@ -74,8 +72,6 @@ class _SignupPageState extends State<SignupPage> {
     required String lastName,
   }) async {
     try {
-      // First try normal insert
-      print('🔄 Attempting normal profile insert...');
       await Supabase.instance.client
           .from('profiles')
           .insert({
@@ -86,14 +82,13 @@ class _SignupPageState extends State<SignupPage> {
           })
           .select()
           .single();
-          
+
       print('✅ Normal profile insert succeeded');
     } catch (e) {
       print('⚠️ Normal insert failed: $e');
       print('🔄 Attempting fallback method...');
-      
+
       try {
-        // Use RLS-bypassing function
         final result = await Supabase.instance.client.rpc(
           'create_user_profile',
           params: {
@@ -102,7 +97,7 @@ class _SignupPageState extends State<SignupPage> {
             'p_last_name': lastName,
           },
         );
-        
+
         print('✅ Fallback profile insert succeeded: $result');
       } catch (e2) {
         print('❌ Fallback also failed: $e2');
@@ -114,7 +109,7 @@ class _SignupPageState extends State<SignupPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign Up')),
+      appBar: AppBar(title: const Text('إنشاء حساب')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -123,32 +118,32 @@ class _SignupPageState extends State<SignupPage> {
             children: [
               TextFormField(
                 controller: _firstNameController,
-                decoration: const InputDecoration(labelText: 'First Name'),
-                validator: (val) => val?.isEmpty ?? true ? 'Required' : null,
+                decoration: const InputDecoration(labelText: 'الاسم الأول'),
+                validator: (val) => val?.isEmpty ?? true ? 'هذا الحقل مطلوب' : null,
               ),
               TextFormField(
                 controller: _lastNameController,
-                decoration: const InputDecoration(labelText: 'Last Name'),
-                validator: (val) => val?.isEmpty ?? true ? 'Required' : null,
+                decoration: const InputDecoration(labelText: 'اسم العائلة'),
+                validator: (val) => val?.isEmpty ?? true ? 'هذا الحقل مطلوب' : null,
               ),
               TextFormField(
                 controller: _emailController,
-                decoration: const InputDecoration(labelText: 'Email'),
+                decoration: const InputDecoration(labelText: 'البريد الإلكتروني'),
                 keyboardType: TextInputType.emailAddress,
-                validator: (val) => val?.isEmpty ?? true ? 'Required' : null,
+                validator: (val) => val?.isEmpty ?? true ? 'هذا الحقل مطلوب' : null,
               ),
               TextFormField(
                 controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'Password'),
+                decoration: const InputDecoration(labelText: 'كلمة المرور'),
                 obscureText: true,
-                validator: (val) => (val?.length ?? 0) < 6 ? 'Min 6 characters' : null,
+                validator: (val) => (val?.length ?? 0) < 6 ? 'يجب أن تكون 6 أحرف على الأقل' : null,
               ),
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: _loading ? null : _signUp,
                 child: _loading
                     ? const CircularProgressIndicator()
-                    : const Text('Create Account'),
+                    : const Text('إنشاء الحساب'),
               ),
             ],
           ),

@@ -4,7 +4,6 @@ import 'package:alruba_waterapp/repositories/location_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-
 class EditLocationPage extends ConsumerStatefulWidget {
   final Location location;
   const EditLocationPage({super.key, required this.location});
@@ -39,10 +38,10 @@ class _EditLocationPageState extends ConsumerState<EditLocationPage> {
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
-      debugPrint('Error updating location: $e');
+      debugPrint('حدث خطأ أثناء تعديل الموقع: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('خطأ: $e')),
         );
       }
     } finally {
@@ -54,49 +53,52 @@ class _EditLocationPageState extends ConsumerState<EditLocationPage> {
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      maxChildSize: 0.9,
-      builder: (context, scrollController) {
-        return SingleChildScrollView(
-          controller: scrollController,
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 24,
-              bottom: mq.viewInsets.bottom + 24,
-            ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  const Text(
-                    'Edit Location',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 24),
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(labelText: 'Location Name'),
-                    validator: (value) =>
-                        (value == null || value.isEmpty)
-                            ? 'Please enter a location name'
-                            : null,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _updateLocation,
-                    child: _isLoading
-                        ? const CircularProgressIndicator()
-                        : const Text('Update Location'),
-                  ),
-                ],
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        builder: (context, scrollController) {
+          return SingleChildScrollView(
+            controller: scrollController,
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 24,
+                bottom: mq.viewInsets.bottom + 24,
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    const Text(
+                      'تعديل الموقع',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 24),
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(labelText: 'اسم الموقع'),
+                      validator: (value) =>
+                          (value == null || value.isEmpty)
+                              ? 'يرجى إدخال اسم الموقع'
+                              : null,
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : _updateLocation,
+                      child: _isLoading
+                          ? const CircularProgressIndicator()
+                          : const Text('تحديث الموقع'),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

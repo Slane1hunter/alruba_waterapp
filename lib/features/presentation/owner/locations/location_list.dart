@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'add_location_page.dart';
 import 'edit_location_page.dart';
- // We'll create this
 
 class LocationListPage extends ConsumerWidget {
   const LocationListPage({super.key});
@@ -13,52 +12,59 @@ class LocationListPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final locationsAsync = ref.watch(locationsProvider);
 
-    return Scaffold(
-      body: locationsAsync.when(
-        data: (locations) {
-          if (locations.isEmpty) {
-            return const Center(child: Text('No locations found.'));
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: locations.length,
-            itemBuilder: (context, index) {
-              final location = locations[index];
-              return Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                margin: const EdgeInsets.only(bottom: 16),
-                child: ListTile(
-                  title: Text(location.name),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () {
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        builder: (_) => EditLocationPage(location: location),
-                      );
-                    },
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('قائمة المواقع'),
+        ),
+        body: locationsAsync.when(
+          data: (locations) {
+            if (locations.isEmpty) {
+              return const Center(child: Text('لم يتم العثور على مواقع.'));
+            }
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: locations.length,
+              itemBuilder: (context, index) {
+                final location = locations[index];
+                return Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                ),
-              );
-            },
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) =>
-            Center(child: Text('Error: ${error.toString()}')),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            builder: (_) => const AddLocationPage(),
-          );
-        },
-        child: const Icon(Icons.add),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  child: ListTile(
+                    title: Text(location.name),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.edit),
+                      onPressed: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          builder: (_) => EditLocationPage(location: location),
+                        );
+                      },
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stack) =>
+              Center(child: Text('حدث خطأ: ${error.toString()}')),
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () {
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => const AddLocationPage(),
+            );
+          },
+          child: const Icon(Icons.add),
+          tooltip: 'إضافة موقع',
+        ),
       ),
     );
   }

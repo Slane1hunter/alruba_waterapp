@@ -5,47 +5,30 @@ import 'package:collection/collection.dart';
 
 import '../../../services/supabase_service.dart';
 
-/*──────────────────────────────────────────*/
-/*  CURRENCY: Lebanese Pounds (no decimals) */
-/*──────────────────────────────────────────*/
 final _lbp = NumberFormat.currency(
   locale: 'ar_LB',
-  symbol: 'LBP ',
+  symbol: 'ل.ل ',
   decimalDigits: 0,
 );
 
-/*──────────────────────────────────────────*/
-/*  MAIN PAGE                               */
-/*──────────────────────────────────────────*/
 class GallonTransactionStatusPage extends ConsumerStatefulWidget {
   const GallonTransactionStatusPage({super.key});
 
   @override
-  ConsumerState<GallonTransactionStatusPage> createState() =>
-      _GallonTransactionStatusPageState();
+  ConsumerState<GallonTransactionStatusPage> createState() => _GallonTransactionStatusPageState();
 }
 
-class _GallonTransactionStatusPageState
-    extends ConsumerState<GallonTransactionStatusPage> {
-  /* UI state */
+class _GallonTransactionStatusPageState extends ConsumerState<GallonTransactionStatusPage> {
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
-  int get _totalGallons =>
-      _all.fold<int>(0, (sum, tx) => sum + (tx['quantity'] as int));
 
   bool _loading = true;
   String _search = '';
-  String _status = 'all'; // all | paid | unpaid | deposit
-  DateTime? _start;
-  DateTime? _end;
-
   List<Map<String, dynamic>> _all = [];
 
-  /*────────────────── init / dispose ──────────────────*/
   @override
   void initState() {
     super.initState();
-    // Wait until the widget tree has built once before hitting Supabase.
     WidgetsBinding.instance.addPostFrameCallback((_) => _fetch());
     _searchCtrl.addListener(() {
       setState(() => _search = _searchCtrl.text.toLowerCase());
@@ -59,22 +42,20 @@ class _GallonTransactionStatusPageState
     super.dispose();
   }
 
-  /*────────────────── Supabase fetch ──────────────────*/
   Future<void> _fetch() async {
     setState(() => _loading = true);
     try {
-      final rows =
-          await SupabaseService.client.from('gallon_transactions').select('''
-            id,
-            sale_id,
-            customer_id,
-            quantity,
-            amount,
-            status,
-            transaction_type,
-            created_at,
-            customer:customers(id,name)
-          ''').order('created_at', ascending: false);
+      final rows = await SupabaseService.client.from('gallon_transactions').select('''
+        id,
+        sale_id,
+        customer_id,
+        quantity,
+        amount,
+        status,
+        transaction_type,
+        created_at,
+        customer:customers(id,name)
+      ''').order('created_at', ascending: false);
 
       _all = List<Map<String, dynamic>>.from(rows)
           .map((m) => {
@@ -82,58 +63,29 @@ class _GallonTransactionStatusPageState
                 'quantity': (m['quantity'] as num?)?.toInt() ?? 0,
                 'amount': (m['amount'] as num?)?.toDouble() ?? 0.0,
                 'status': (m['status']?.toString().toLowerCase() ?? 'unpaid'),
-                'created_at':
-                    m['created_at'] ?? DateTime.now().toIso8601String(),
-                'customer': m['customer'] ?? {'id': '?', 'name': 'Unknown'},
+                'created_at': m['created_at'] ?? DateTime.now().toIso8601String(),
+                'customer': m['customer'] ?? {'id': '?', 'name': 'مجهول'},
               })
+          .where((m) => m['status'] == 'unpaid' || m['transaction_type'] == 'deposit')
           .toList();
     } catch (e) {
-      _snack('Error loading: $e', Colors.red);
+      _snack('خطأ في التحميل: $e', Colors.red);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  /*────────────────── filtering / grouping ─────────────*/
-  List<Map<String, dynamic>> get _filtered => _all.where((tx) {
-        // status
-        if (_status != 'all' && tx['status'] != _status) return false;
-
-        // date-range (inclusive)
-        final dt = DateTime.tryParse(tx['created_at'])?.toLocal();
-        if (dt != null) {
-          if (_start != null && dt.isBefore(_start!)) return false;
-
-          if (_end != null) {
-            final endInclusive = DateTime(_end!.year, _end!.month, _end!.day)
-                .add(const Duration(days: 1));
-            if (dt.isAfter(endInclusive)) return false;
-          }
-        }
-
-        // search
-        final cust = (tx['customer']['name'] as String).toLowerCase();
-        return cust.contains(_search);
-      }).toList();
-
   Map<String, List<Map<String, dynamic>>> get _byCustomer =>
-      groupBy(_filtered, (m) => m['customer']['id'] as String);
+      groupBy(_all.where((tx) {
+        final name = (tx['customer']['name'] as String).toLowerCase();
+        return name.contains(_search);
+      }), (m) => m['customer']['id'] as String);
 
-  /*────────────────── build ────────────────────────────*/
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gallon Transactions'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Chip(
-              label: Text('Total $_totalGallons gal'),
-              avatar: const Icon(Icons.water_drop, size: 16),
-            ),
-          ),
-        ],
+        title: const Text('الحركات المالية - جالون'),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -142,10 +94,10 @@ class _GallonTransactionStatusPageState
               child: CustomScrollView(
                 controller: _scrollCtrl,
                 slivers: [
-                  SliverToBoxAdapter(child: _filters(context)),
+                  SliverToBoxAdapter(child: _searchField()),
                   if (_byCustomer.isEmpty)
                     const SliverFillRemaining(
-                      child: Center(child: Text('No transactions found')),
+                      child: Center(child: Text('لا توجد نتائج')),
                     )
                   else
                     SliverList(
@@ -163,131 +115,33 @@ class _GallonTransactionStatusPageState
     );
   }
 
-  /*────────────────── filters panel ───────────────────*/
-  Widget _filters(BuildContext ctx) => Padding(
+  Widget _searchField() => Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(
-              controller: _searchCtrl,
-              decoration: InputDecoration(
-                labelText: 'Search customer',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _search.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () => _searchCtrl.clear(),
-                      )
-                    : null,
-                filled: true,
-                fillColor: Colors.grey.shade100,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
+        child: TextField(
+          controller: _searchCtrl,
+          decoration: InputDecoration(
+            labelText: 'ابحث باسم الزبون',
+            prefixIcon: const Icon(Icons.search),
+            filled: true,
+            fillColor: Colors.grey.shade100,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: _statusDrop(ctx)),
-                const SizedBox(width: 12),
-                Expanded(child: _datePick(ctx)),
-              ],
-            ),
-          ],
-        ),
-      );
-
-  InputDecoration _dec(String lbl) => InputDecoration(
-        labelText: lbl,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-      );
-
-  Widget _statusDrop(BuildContext ctx) => InputDecorator(
-        decoration: _dec('Status'),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            isExpanded: true,
-            value: _status,
-            onChanged: (v) => setState(() => _status = v ?? 'all'),
-            items: const [
-              DropdownMenuItem(value: 'all', child: Text('All')),
-              DropdownMenuItem(value: 'paid', child: Text('Paid')),
-              DropdownMenuItem(value: 'unpaid', child: Text('Unpaid')),
-              DropdownMenuItem(value: 'deposit', child: Text('Deposit')),
-            ],
           ),
         ),
       );
 
-  Widget _datePick(BuildContext ctx) {
-    final txt = (_start != null && _end != null)
-        ? '${DateFormat('MMM d').format(_start!)} – '
-            '${DateFormat('MMM d').format(_end!)}'
-        : 'Select dates';
-
-    return InputDecorator(
-      decoration: _dec('Date range'),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextButton(
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                alignment: Alignment.centerLeft,
-              ),
-              onPressed: _pickDates,
-              child: Text(txt, overflow: TextOverflow.ellipsis),
-            ),
-          ),
-          if (_start != null)
-            IconButton(
-              icon: const Icon(Icons.clear, size: 20),
-              onPressed: () => setState(() {
-                _start = null;
-                _end = null;
-              }),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _pickDates() async {
-    final now = DateTime.now();
-    final range = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(now.year - 1),
-      lastDate: now,
-      initialEntryMode: DatePickerEntryMode.calendarOnly,
-      initialDateRange: (_start != null && _end != null)
-          ? DateTimeRange(start: _start!, end: _end!)
-          : null,
-    );
-    if (range != null) {
-      setState(() {
-        _start = range.start;
-        _end = range.end;
-      });
-    }
-  }
-
-  /*────────────────── mark as paid ────────────────────*/
-  /*────────────────── mark as paid ────────────────────*/
   Future<void> _markPaid(Map<String, dynamic> tx) async {
     if (tx['status'] == 'paid') {
-      _snack('Already paid', Colors.orange);
+      _snack('تم الدفع مسبقاً', Colors.orange);
       return;
     }
     if (tx['sale_id'] == null) {
-      _snack('Missing sale id', Colors.red);
+      _snack('لا يوجد sale_id', Colors.red);
       return;
     }
-
     try {
-      // Update both status and transaction type if needed
       final updates = {
         'status': 'paid',
         if (tx['transaction_type'] == 'deposit') 'transaction_type': 'purchase'
@@ -298,7 +152,6 @@ class _GallonTransactionStatusPageState
           .update(updates)
           .eq('id', tx['id']);
 
-      // Update local state
       setState(() {
         tx['status'] = 'paid';
         if (tx['transaction_type'] == 'deposit') {
@@ -306,17 +159,16 @@ class _GallonTransactionStatusPageState
         }
       });
 
-      _snack('Marked as paid', Colors.green);
+      _snack('تم تأكيد الدفع', Colors.green);
     } catch (e) {
-      _snack('Error: $e', Colors.red);
+      _snack('خطأ: $e', Colors.red);
     }
   }
 
-  void _snack(String m, Color c) => ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(m), backgroundColor: c));
+  void _snack(String m, Color c) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m), backgroundColor: c));
 }
 
-/*────────────────── customer tile ───────────────────*/
 class _CustomerTile extends StatelessWidget {
   const _CustomerTile(this.entry, this.onPay);
 
@@ -325,11 +177,9 @@ class _CustomerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = entry.value.first['customer']['name'] ?? 'Unknown';
-
+    final name = entry.value.first['customer']['name'] ?? 'مجهول';
     final qty = entry.value.fold<int>(0, (s, m) => s + (m['quantity'] as int));
-    final amt =
-        entry.value.fold<double>(0, (s, m) => s + (m['amount'] as double));
+    final amt = entry.value.fold<double>(0, (s, m) => s + (m['amount'] as double));
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -341,7 +191,7 @@ class _CustomerTile extends StatelessWidget {
         subtitle: Wrap(
           spacing: 8,
           children: [
-            _chip(Icons.water_drop, '$qty Gal'),
+            _chip(Icons.water_drop, '$qty جالون'),
             _chip(Icons.attach_money, _lbp.format(amt)),
           ],
         ),
@@ -360,7 +210,6 @@ class _CustomerTile extends StatelessWidget {
       );
 }
 
-/*────────────────── single tx tile ───────────────────*/
 class _TxTile extends StatelessWidget {
   const _TxTile(this.tx, this.onPay);
   final Map<String, dynamic> tx;
@@ -370,7 +219,7 @@ class _TxTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = (tx['status'] as String).toLowerCase();
     final paid = status == 'paid';
-    final dep = status == 'deposit';
+    final dep = tx['transaction_type'] == 'deposit';
     final dt = DateTime.tryParse(tx['created_at'])?.toLocal() ?? DateTime.now();
 
     return Container(
@@ -398,12 +247,12 @@ class _TxTile extends StatelessWidget {
           spacing: 8,
           runSpacing: 4,
           children: [
-            _pill('Qty: ${tx['quantity']}'),
-            _pill('Amt: ${_lbp.format(tx['amount'])}'),
-            _pill(DateFormat('MMM d • HH:mm').format(dt)),
+            _pill('الكمية: ${tx['quantity']}'),
+            _pill('المبلغ: ${_lbp.format(tx['amount'])}'),
+            _pill(DateFormat('MMM d • HH:mm', 'ar').format(dt)),
           ],
         ),
-        trailing: !paid // ← pay allowed for deposit & unpaid
+        trailing: !paid
             ? IconButton(
                 icon: const Icon(Icons.payment, color: Colors.blue),
                 onPressed: onPay,
@@ -421,8 +270,6 @@ class _TxTile extends StatelessWidget {
           color: Colors.grey.shade200,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(t,
-            style:
-                const TextStyle(fontSize: 12, overflow: TextOverflow.ellipsis)),
+        child: Text(t, style: const TextStyle(fontSize: 12)),
       );
 }

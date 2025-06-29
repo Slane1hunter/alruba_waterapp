@@ -17,13 +17,13 @@ import 'providers/auth_provider.dart';
 import 'providers/role_provider.dart';
 import 'services/supabase_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-    await dotenv.load(); // 👈 Load .env file
-
+  await initializeDateFormatting('ar', null); // Initialize Arabic locale data
+  await dotenv.load(); // 👈 Load .env file
 
   await Hive.initFlutter();
   Hive.registerAdapter(OfflineGallonTransactionAdapter());
@@ -31,11 +31,11 @@ void main() async {
   Hive.registerAdapter(OfflineSaleAdapter());
   await Hive.openBox<OfflineSale>('offline_sales');
 
-    await SupabaseService.initialize(
+  await SupabaseService.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
-  
+
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -48,23 +48,34 @@ class MyApp extends ConsumerWidget {
     ref.watch(roleSyncProvider); // Initialize role syncing
 
     return MaterialApp.router(
-      title: 'Water Distribution',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.primary,
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        textTheme: const TextTheme(
-          headlineMedium: AppTextStyles.headline,
-          bodyLarge: AppTextStyles.body,
-        ),
-      ),
-      debugShowCheckedModeBanner: false,
-      routeInformationParser: router.routeInformationParser,
-      routerDelegate: router.routerDelegate,
-      routeInformationProvider: router.routeInformationProvider,
-    );
+  title: 'Water Distribution',
+  debugShowCheckedModeBanner: false,
+  theme: ThemeData(
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: AppColors.primary,
+      brightness: Brightness.light,
+    ),
+    useMaterial3: true,
+    textTheme: const TextTheme(
+      headlineMedium: AppTextStyles.headline,
+      bodyLarge: AppTextStyles.body,
+    ),
+  ),
+  locale: const Locale('ar'), // Arabic language
+  localizationsDelegates:const[
+    GlobalMaterialLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+  ],
+  supportedLocales: const [
+    Locale('ar'),
+    Locale('en'),
+  ],
+  routerDelegate: router.routerDelegate,
+  routeInformationParser: router.routeInformationParser,
+  routeInformationProvider: router.routeInformationProvider,
+);
+
   }
 }
 
@@ -87,7 +98,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       final path = state.uri.path;
 
       debugPrint('Redirect check: Auth=$isAuthenticated, Path=$path');
-      debugPrint('Current user: ${SupabaseService.client.auth.currentUser?.id}');
+      debugPrint(
+          'Current user: ${SupabaseService.client.auth.currentUser?.id}');
 
       if (!isAuthenticated && path != '/login' && path != '/signup') {
         return '/login';
@@ -123,7 +135,7 @@ class RoleBasedWrapper extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final roleAsync = ref.watch(roleProvider);
-    
+
     // Listen for auth changes to refresh role
     ref.listen(authStateProvider, (_, state) {
       if (state.valueOrNull != null) {
@@ -135,17 +147,20 @@ class RoleBasedWrapper extends ConsumerWidget {
       data: (role) {
         final normalizedRole = role.trim().toLowerCase();
         debugPrint('ROLE RESOLVED: $normalizedRole');
-        
+
         if (normalizedRole.isEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             ref.read(authProvider.notifier).signOut();
             context.go('/login');
           });
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+              body: Center(child: CircularProgressIndicator()));
         }
-        return _buildLayout(context, ref, normalizedRole); // Pass context and ref
+        return _buildLayout(
+            context, ref, normalizedRole); // Pass context and ref
       },
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (error, stack) {
         debugPrint('Role error: $error\n$stack');
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -159,36 +174,36 @@ class RoleBasedWrapper extends ConsumerWidget {
 
   // FIXED: Added context and ref parameters
   Widget _buildLayout(BuildContext context, WidgetRef ref, String role) {
-  switch (role) {
-    case 'owner':
-      return const OwnerHomePage();
-    case 'manager':
-      return const ManagerHomePage();
-    case 'distributor':
-      return const DistributorHomePage();
-    case 'viewer':
-      debugPrint('Navigating to ViewerWaitingPage');
-      return const ViewerWaitingPage();
-    default:
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('Invalid role: $role', style: const TextStyle(fontSize: 20)),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
-                  ref.read(authProvider.notifier).signOut();
-                  context.go('/login');
-                },
-                child: const Text('Back to Login'),
-              ),
-            ],
+    switch (role) {
+      case 'owner':
+        return const OwnerHomePage();
+      case 'manager':
+        return const ManagerHomePage();
+      case 'distributor':
+        return const DistributorHomePage();
+      case 'viewer':
+        debugPrint('Navigating to ViewerWaitingPage');
+        return const ViewerWaitingPage();
+      default:
+        return Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Invalid role: $role',
+                    style: const TextStyle(fontSize: 20)),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    ref.read(authProvider.notifier).signOut();
+                    context.go('/login');
+                  },
+                  child: const Text('Back to Login'),
+                ),
+              ],
+            ),
           ),
-        ),
-      );
+        );
+    }
   }
-}
-
 }

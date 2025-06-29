@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-// Adjust these imports to match your actual file paths:
+// عدّل هذه الاستيرادات حسب مسارات ملفاتك الفعلية:
 import 'package:alruba_waterapp/features/presentation/owner/locations/add_location_page.dart';
 import 'package:alruba_waterapp/features/presentation/owner/locations/edit_location_page.dart';
 import 'package:alruba_waterapp/features/presentation/owner/products/add_product_page.dart';
@@ -16,14 +16,14 @@ import 'package:alruba_waterapp/providers/location_provider.dart';
 import 'package:alruba_waterapp/models/product.dart';
 import 'package:alruba_waterapp/models/location.dart';
 
-/// Shared currency formatter
+/// منسق العملة المشترك
 final _currencyFormat = NumberFormat.currency(
   locale: 'en_US',
   symbol: 'LBP ',
   decimalDigits: 2,
 );
 
-/// Single page that manages both Products and Locations using tabs + improved UI.
+/// صفحة واحدة لإدارة المنتجات والمواقع باستخدام تبويبات + واجهة محسّنة.
 class OwnerManagementPage extends ConsumerStatefulWidget {
   const OwnerManagementPage({super.key});
 
@@ -34,7 +34,7 @@ class OwnerManagementPage extends ConsumerStatefulWidget {
 class _OwnerManagementPageState extends ConsumerState<OwnerManagementPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  int _currentTabIndex = 0; // 0 => Products, 1 => Locations
+  int _currentTabIndex = 0; // 0 => المنتجات, 1 => المواقع
 
   @override
   void initState() {
@@ -45,7 +45,7 @@ class _OwnerManagementPageState extends ConsumerState<OwnerManagementPage>
     });
   }
 
-  /// Single FAB that depends on the active tab
+  /// زر FAB واحد يتغير حسب التبويب النشط
   void _handleFabPressed() {
     if (_currentTabIndex == 0) {
       showModalBottomSheet(
@@ -68,14 +68,14 @@ class _OwnerManagementPageState extends ConsumerState<OwnerManagementPage>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Owner Management'),
+        title: const Text('إدارة المالك'),
         centerTitle: true,
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: theme.colorScheme.onPrimary,
           tabs: const [
-            Tab(icon: Icon(Icons.inventory_2), text: 'Products'),
-            Tab(icon: Icon(Icons.map), text: 'Locations'),
+            Tab(icon: Icon(Icons.inventory_2), text: 'المنتجات'),
+            Tab(icon: Icon(Icons.map), text: 'المواقع'),
           ],
         ),
       ),
@@ -88,7 +88,7 @@ class _OwnerManagementPageState extends ConsumerState<OwnerManagementPage>
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _handleFabPressed,
-        label: Text(_currentTabIndex == 0 ? 'Add Product' : 'Add Location'),
+        label: Text(_currentTabIndex == 0 ? 'إضافة منتج' : 'إضافة موقع'),
         icon: const Icon(Icons.add),
       ),
     );
@@ -96,7 +96,7 @@ class _OwnerManagementPageState extends ConsumerState<OwnerManagementPage>
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// PRODUCTS TAB
+// تبويب المنتجات
 ////////////////////////////////////////////////////////////////////////////////
 
 class _ProductsTab extends ConsumerWidget {
@@ -119,7 +119,7 @@ class _ProductsTab extends ConsumerWidget {
               physics: const AlwaysScrollableScrollPhysics(),
               children: const [
                 SizedBox(height: 120),
-                Center(child: Text('No products found.')),
+                Center(child: Text('لا توجد منتجات.')),
               ],
             );
           }
@@ -137,7 +137,7 @@ class _ProductsTab extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
             const SizedBox(height: 120),
-            Center(child: Text('Error: $error')),
+            Center(child: Text('خطأ: $error')),
           ],
         ),
       ),
@@ -145,7 +145,7 @@ class _ProductsTab extends ConsumerWidget {
   }
 }
 
-/// Card for each product with an Edit button, prices formatted as "LBP 1,200.00"
+/// بطاقة لكل منتج مع زر تعديل، والأسعار بتنسيق "LBP 1,200.00"
 class _ProductCard extends StatelessWidget {
   final Product product;
   const _ProductCard({required this.product});
@@ -182,16 +182,16 @@ class _ProductCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Home Price: ${_currencyFormat.format(p.homePrice)}'),
-        Text('Market Price: ${_currencyFormat.format(p.marketPrice)}'),
-        Text('Production Cost: ${_currencyFormat.format(p.productionCost)}'),
+        Text('سعر المنزل: ${_currencyFormat.format(p.homePrice)}'),
+        Text('السعر في السوق: ${_currencyFormat.format(p.marketPrice)}'),
+        Text('تكلفة الإنتاج: ${_currencyFormat.format(p.productionCost)}'),
       ],
     );
   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LOCATIONS TAB
+// تبويب المواقع
 ////////////////////////////////////////////////////////////////////////////////
 
 class _LocationsTab extends ConsumerWidget {
@@ -214,7 +214,7 @@ class _LocationsTab extends ConsumerWidget {
               physics: const AlwaysScrollableScrollPhysics(),
               children: const [
                 SizedBox(height: 120),
-                Center(child: Text('No locations found.')),
+                Center(child: Text('لا توجد مواقع.')),
               ],
             );
           }
@@ -232,7 +232,7 @@ class _LocationsTab extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
             const SizedBox(height: 120),
-            Center(child: Text('Error: $error')),
+            Center(child: Text('خطأ: $error')),
           ],
         ),
       ),
@@ -240,7 +240,7 @@ class _LocationsTab extends ConsumerWidget {
   }
 }
 
-/// Card for each location with an Edit button
+/// بطاقة لكل موقع مع زر تعديل
 class _LocationCard extends StatelessWidget {
   final Location location;
   const _LocationCard({required this.location});

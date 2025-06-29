@@ -70,24 +70,27 @@ class ManagerSale {
 final managerSalesProvider =
     FutureProvider.autoDispose<List<ManagerSale>>((ref) async {
   final resp = await SupabaseService.client
-      .from('sales')
-      .select(r'''
-        id,
-        created_at,
-        payment_date,
-        payment_status,
-        quantity,
-        price_per_unit,
-        total_amount,
-        product:products!fk_sales_product(name),
-        customer:customers!fk_sales_customer(
-          name,
-          phone,
-          precise_location,
-          location:locations(name)
-        )
-      ''')
-      .order('created_at', ascending: true);
+    .from('sales')
+    .select(r'''
+      id,
+      created_at,
+      payment_date,
+      payment_status,
+      quantity,
+      price_per_unit,
+      total_amount,
+      sold_by,
+      product:products!fk_sales_product(name),
+      customer:customers!fk_sales_customer(
+        name,
+        phone,
+        precise_location,
+        location:locations(name)
+      ),
+      seller_profile:profiles!sales_sold_by_fkey(role)
+    ''')
+    .filter('seller_profile.role', 'in', ['manager', 'distributor'])
+    .order('created_at', ascending: true);
 
   return (resp as List)
       .cast<Map<String, dynamic>>()

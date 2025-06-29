@@ -1,5 +1,3 @@
-// lib/features/presentation/owner/product_list_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:alruba_waterapp/models/product.dart';
@@ -18,7 +16,7 @@ class ProductListPage extends ConsumerWidget {
       body: productsAsync.when(
         data: (products) {
           if (products.isEmpty) {
-            return const Center(child: Text('No products found.'));
+            return const Center(child: Text('لا توجد منتجات.'));
           }
           return ListView.builder(
             padding: const EdgeInsets.all(16),
@@ -31,7 +29,7 @@ class ProductListPage extends ConsumerWidget {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) =>
-            Center(child: Text('Error: ${error.toString()}')),
+            Center(child: Text('خطأ: ${error.toString()}')),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
@@ -47,9 +45,8 @@ class ProductListPage extends ConsumerWidget {
   }
 
   Widget _buildProductCard(BuildContext context, Product product) {
-    // Helper to format as "LBP 1,200.00"
-    String format(double value) =>
-        'LBP ${value.toStringAsFixed(2)}';
+    // مساعدة لتنسيق السعر مثل "LBP 1,200.00"
+    String format(double value) => 'ل.ل ${value.toStringAsFixed(2)}';
 
     return Card(
       elevation: 3,
@@ -59,10 +56,10 @@ class ProductListPage extends ConsumerWidget {
         contentPadding: const EdgeInsets.all(16),
         title: Text(product.name, style: const TextStyle(fontSize: 18)),
         subtitle: Text(
-          'Home Price: ${format(product.homePrice)}\n'
-          'Market Price: ${format(product.marketPrice)}\n'
-          'Production Cost: ${format(product.productionCost)}\n'
-          'Refillable: ${product.isRefillable ? "Yes" : "No"}',
+          'سعر التوصيل للمنزل: ${format(product.homePrice)}\n'
+          'سعر السوق: ${format(product.marketPrice)}\n'
+          'تكلفة الإنتاج: ${format(product.productionCost)}\n'
+          'قابل لإعادة التعبئة: ${product.isRefillable ? "نعم" : "لا"}',
         ),
         trailing: IconButton(
           icon: const Icon(Icons.edit),

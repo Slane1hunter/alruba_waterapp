@@ -20,7 +20,7 @@ class LogoutButton extends ConsumerWidget {
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.redAccent,
       ),
-      child: const Text('Log Out'),
+      child: const Text('تسجيل الخروج'),
     );
   }
 }

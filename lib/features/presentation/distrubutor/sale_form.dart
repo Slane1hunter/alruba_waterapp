@@ -97,7 +97,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
     // 1) Block if new customer but precise location not ready
     if (_isNewCustomer && _preciseLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please wait until precise location has finished loading.')),
+        const SnackBar(content: Text('.يرجى الانتظار حتى يتم تحميل الموقع الدقيق بالكامل')),
       );
       return;
     }
@@ -107,7 +107,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
     if (!_isNewCustomer &&
         (_existingCustomerId == null || _existingCustomerId!.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select an existing customer.')),
+        const SnackBar(content: Text('.الرجاء اختيار عميل موجود')),
       );
       return;
     }
@@ -194,7 +194,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
     final canSubmit = !_isNewCustomer || (_preciseLocation != null);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Make a Sale')),
+      appBar: AppBar(title: const Text('إجراء بيع')),
       backgroundColor: Colors.grey[100],
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -217,9 +217,9 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                         children: [
                           const Icon(Icons.person_outline, size: 20),
                           const SizedBox(width: 8),
-                          Text('Customer Info', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                          Text('معلومات العميل', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                           const Spacer(),
-                          Text(_isNewCustomer ? 'New' : 'Existing'),
+                          Text(_isNewCustomer ? 'جديد' : 'موجود'),
                           Switch(
                             value: _isNewCustomer,
                             onChanged: (val) {
@@ -258,7 +258,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                               children: [
                                 ElevatedButton.icon(
                                   icon: const Icon(Icons.people_alt),
-                                  label: Text(_existingCustomerName ?? 'Select Existing Customer'),
+                                  label: Text(_existingCustomerName ?? 'اختر عميلًا موجودًا'),
                                   onPressed: () async {
                                     final chosen = await showModalBottomSheet<Map<String, String>>(
                                       context: context,
@@ -303,7 +303,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                       if (_isNewCustomer) ...[
                         TextFormField(
                           decoration: const InputDecoration(
-                            labelText: 'Full Name (Optional)',
+                            labelText: 'الاسم الكامل',
                             prefixIcon: Icon(Icons.person_outline),
                             border: OutlineInputBorder(),
                           ),
@@ -312,18 +312,18 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                         const SizedBox(height: 16),
                         TextFormField(
                           decoration: const InputDecoration(
-                            labelText: 'Phone Number',
+                            labelText: 'رقم الهاتف',
                             prefixIcon: Icon(Icons.phone),
                             border: OutlineInputBorder(),
                           ),
                           keyboardType: TextInputType.phone,
                           onSaved: (v) => _newCustomerPhone = v,
-                          validator: (v) => v == null || v.isEmpty ? 'Enter phone' : null,
+                          validator: (v) => v == null || v.isEmpty ? 'أدخل رقم الهاتف' : null,
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<String>(
                           decoration: const InputDecoration(
-                            labelText: 'Customer Type',
+                            labelText: 'نوع العميل',
                             border: OutlineInputBorder(),
                           ),
                           value: _newCustomerType,
@@ -336,7 +336,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                               _autoFillPrice();
                             });
                           },
-                          validator: (v) => v == null ? 'Please select a type' : null,
+                          validator: (v) => v == null ? 'الرجاء اختيار نوع' : null,
                         ),
                         const SizedBox(height: 16),
                         locationsAsync.when(
@@ -371,12 +371,12 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                       Row(children: [
                         const Icon(Icons.shopping_bag_outlined, size: 20),
                         const SizedBox(width: 8),
-                        Text('Product & Pricing', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        Text('المنتج والتسعير', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                       ]),
                       const SizedBox(height: 16),
                       ref.watch(productsProvider).when(
                         loading: () => const Center(child: CircularProgressIndicator()),
-                        error: (err, _) => Text('Product Error: $err'),
+                        error: (err, _) => Text('خطأ في المنتج: $err'),
                         data: (prodList) => Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -417,7 +417,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                       Row(children: [  
                         const Icon(Icons.payment_outlined, size: 20),  
                         const SizedBox(width: 8),  
-                        Text('Payment Details', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),  
+                        Text('تفاصيل الدفع', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),  
                       ]),  
                       const SizedBox(height: 16),  
                       PaymentSection(  
@@ -436,7 +436,7 @@ class _MakeSalePageState extends ConsumerState<MakeSalePage> {
                     ? _submitFormOffline  
                     : () {  
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(  
-                          content: Text('Please wait for precise location to finish loading.'),  
+                          content: Text('يرجى الانتظار حتى يتم تحميل الموقع الدقيق بالكامل.'),  
                         ));  
                       },  
               ),  
@@ -495,13 +495,13 @@ class _CustomerSearchSheetState extends State<_CustomerSearchSheet> {
               const SizedBox(height: 12),  
               Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(2))),  
               const SizedBox(height: 12),  
-              Text('Select a Customer', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),  
+              Text('اختر عميلًا', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),  
               const SizedBox(height: 16),  
               Padding(  
                 padding: const EdgeInsets.symmetric(horizontal: 16),  
                 child: TextField(  
                   controller: _searchCtrl,  
-                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Search Customer', border: OutlineInputBorder()),  
+                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'ابحث عن العميل', border: OutlineInputBorder()),  
                 ),  
               ),  
               const SizedBox(height: 8),  

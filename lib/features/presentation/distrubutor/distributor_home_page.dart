@@ -1,3 +1,5 @@
+import 'package:alruba_waterapp/features/presentation/logout_button.dart';
+import 'package:alruba_waterapp/features/presentation/manager/customer_details_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -6,7 +8,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:alruba_waterapp/features/presentation/distrubutor/sale_form.dart';
 import 'package:alruba_waterapp/features/presentation/distrubutor/distributor_sales_page.dart';
 import 'package:alruba_waterapp/features/presentation/distrubutor/sales/widgets/sales_queue_page.dart';
-import 'package:alruba_waterapp/features/presentation/distrubutor/distrubutor_profile_page.dart';
 
 import 'package:alruba_waterapp/providers/distributor_sales_provider.dart'
     show DistributorSale, distributorSalesProvider;
@@ -32,16 +33,13 @@ class _DistributorHomePageState extends ConsumerState<DistributorHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Distributor Dashboard',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 22,
-              letterSpacing: 0.5,
-            )),
+       
         flexibleSpace: Container(
           decoration: const BoxDecoration(gradient: _primaryGradient),
         ),
         actions: [
+          const LogoutButton(fullWidth: false),
+          const SizedBox(width:80),
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () => ref.invalidate(distributorSalesProvider),
@@ -54,7 +52,7 @@ class _DistributorHomePageState extends ConsumerState<DistributorHomePage> {
           _DashboardTab(),
           DistributorSalesPage(),
           SalesQueuePage(),
-          DistributorProfilePage(),
+          CustomerDetailsPage(),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -177,16 +175,16 @@ class _DashboardTab extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _SummaryCard(
-                title: "Today's Orders",
+                title: "طلبات اليوم",
                 children: [
-                  'Total orders: ${createdToday.length}',
-                  'Upfront paid: ${lbp.format(revenueToday)}',
-                  'Deposits: ${lbp.format(depositTaken)}',
+                  'إجمالي الطلبات: ${createdToday.length}',
+                  'المدفوع مقدماً: ${lbp.format(revenueToday)}',
+                  'الودائع: ${lbp.format(depositTaken)}',
                 ],
               ),
               const SizedBox(height: 16),
               _SummaryCard(
-                title: "Items Sold Today",
+                title: "العناصر المباعة اليوم",
                 children: itemsSoldMap.entries.map((e) {
                   final product = e.key;
                   final total = e.value;
@@ -205,28 +203,28 @@ class _DashboardTab extends ConsumerWidget {
                           s.paymentStatus == 'unpaid')
                       .fold<int>(0, (sum, s) => sum + s.quantity);
 
-                  return '• $product: total $total '
-                      '(paid: $paidCount, deposit: $depositCount, unpaid: $unpaidCount)';
+                  return '• $product: الإجمالي ${total}\u200E '
+                      '(مدفوع: ${paidCount}\u200E, وديعة: ${depositCount}\u200E, غير مدفوع: ${unpaidCount}\u200E)';
                 }).toList(),
               ),
               const SizedBox(height: 16),
               _SummaryCard(
-                title: "Today's Cash Flow",
+                title: "التدفق النقدي اليوم",
                 children: [
-                  'Total collected: ${lbp.format(cashInToday)}',
-                  ' • on new orders: ${lbp.format(revenueToday)}',
-                  ' • on old orders: ${lbp.format(cashInToday - revenueToday)}',
+                  'إجمالي المبلغ المحصل: ${lbp.format(cashInToday)}',
+                  ' • من الطلبات الجديدة: ${lbp.format(revenueToday)}',
+                  ' • من الطلبات القديمة: ${lbp.format(cashInToday - revenueToday)}',
                 ],
               ),
               const SizedBox(height: 16),
               _SummaryCard(
-                title: 'Receivables (Unpaid)',
-                children: ['Total owed: ${lbp.format(outstandingTotal)}'],
+                title: 'المبالغ المستحقة ',
+                children: ['الإجمالي المستحق: ${lbp.format(outstandingTotal)}'],
               ),
               const SizedBox(height: 24),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text('Unpaid Customers',
+                child: Text('العملاء غير المسددين',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
@@ -237,7 +235,7 @@ class _DashboardTab extends ConsumerWidget {
               if (oweMap.isEmpty)
                 Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text('No outstanding payments!',
+                  child: Text('	لا توجد مدفوعات مستحقة!',
                       style: TextStyle(
                         fontSize: 16,
                         color: Colors.grey.shade600,
@@ -381,7 +379,7 @@ class _UnpaidCustomerCard extends StatelessWidget {
             )),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
-          child: Text('Owes: ${lbp.format(entry.value)}',
+          child: Text('مدين بـ: ${lbp.format(entry.value)}',
               style: TextStyle(
                 fontSize: 15,
                 color: Colors.grey.shade600,
@@ -389,7 +387,7 @@ class _UnpaidCustomerCard extends StatelessWidget {
         ),
         trailing: ElevatedButton.icon(
           icon: const Icon(Icons.attach_money, size: 18),
-          label: const Text('Collect'),
+          label: const Text('تحصيل'),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.blue.shade800,
             foregroundColor: Colors.white,
@@ -525,8 +523,10 @@ class _UnpaidSalesPage extends ConsumerWidget {
                           // Also update related gallon transactions
                           await Supabase.instance.client
                               .from('gallon_transactions')
-                              .update({'status' : 'paid', 'transaction_type' : 'purchase'}).eq(
-                                  'sale_id', s.saleId);
+                              .update({
+                            'status': 'paid',
+                            'transaction_type': 'purchase'
+                          }).eq('sale_id', s.saleId);
                         } on PostgrestException catch (err) {
                           msg.showSnackBar(SnackBar(
                               content: Text('Update failed: ${err.message}')));
@@ -542,7 +542,7 @@ class _UnpaidSalesPage extends ConsumerWidget {
                             const SnackBar(content: Text('Payment recorded!')));
                         nav.pop();
                       },
-                      child: const Text('Mark Paid'),
+                      child: const Text('تم الدفع'),
                     ),
                   ),
                 );
@@ -558,7 +558,7 @@ class _UnpaidSalesPage extends ConsumerWidget {
             Icon(Icons.celebration_outlined,
                 size: 80, color: Colors.grey.shade300),
             const SizedBox(height: 20),
-            Text('All payments collected!',
+            Text('!تم تحصيل جميع المدفوعات',
                 style: TextStyle(
                   fontSize: 18,
                   color: Colors.grey.shade500,

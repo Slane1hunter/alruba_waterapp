@@ -18,7 +18,7 @@ class CustomerLocationDropdown extends StatelessWidget {
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
       decoration: const InputDecoration(
-        labelText: 'Select Customer Location',
+        labelText: 'اختر موقع العميل',
         border: OutlineInputBorder(),
       ),
       value: selectedLocation,
@@ -31,7 +31,7 @@ class CustomerLocationDropdown extends StatelessWidget {
       onChanged: onLocationChanged,
       validator: (val) {
         if (val == null || val.isEmpty) {
-          return 'Please select a location';
+          return 'يرجى اختيار الموقع';
         }
         return null;
       },
@@ -42,7 +42,6 @@ class CustomerLocationDropdown extends StatelessWidget {
 /// Widget for fetching and displaying the current (exact) location entirely offline.
 /// Shows a loading indicator while obtaining GPS fix, then displays latitude/longitude.
 class ExactLocationWidget extends StatefulWidget {
-  /// Called when a new location string is available (lat,lon).
   final ValueChanged<String>? onLocationSelected;
 
   const ExactLocationWidget({super.key, this.onLocationSelected});
@@ -58,25 +57,22 @@ class _ExactLocationWidgetState extends State<ExactLocationWidget> {
   Future<void> _getCurrentLocation() async {
     setState(() => _loading = true);
     try {
-      // Ensure GPS is enabled
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        throw Exception("Location services are disabled.");
+        throw Exception("تم تعطيل خدمات الموقع.");
       }
 
-      // Permissions
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          throw Exception("Location permissions are denied.");
+          throw Exception("تم رفض صلاحيات الموقع.");
         }
       }
       if (permission == LocationPermission.deniedForever) {
-        throw Exception("Location permissions are permanently denied.");
+        throw Exception("تم رفض صلاحيات الموقع بشكل دائم.");
       }
 
-      // Get GPS fix
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
@@ -97,7 +93,7 @@ class _ExactLocationWidgetState extends State<ExactLocationWidget> {
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Error getting location: $e"),
+          content: Text("حدث خطأ أثناء الحصول على الموقع: $e"),
           backgroundColor: Colors.red,
         ),
       );
@@ -120,7 +116,7 @@ class _ExactLocationWidgetState extends State<ExactLocationWidget> {
                   ),
                 )
               : const Icon(Icons.my_location),
-          label: Text(_loading ? 'Locating...' : 'Get Current Location'),
+          label: Text(_loading ? 'جاري تحديد الموقع...' : 'احصل على الموقع الحالي'),
           onPressed: _loading ? null : _getCurrentLocation,
         ),
         const SizedBox(height: 16),
@@ -128,8 +124,8 @@ class _ExactLocationWidgetState extends State<ExactLocationWidget> {
           controller: _exactLocationCtrl,
           readOnly: true,
           decoration: InputDecoration(
-            labelText: 'Exact Location',
-            hintText: 'Tap "Get Current Location" to fill this',
+            labelText: 'الموقع الدقيق',
+            hintText: 'اضغط على "احصل على الموقع الحالي" للملء',
             border: const OutlineInputBorder(),
             suffixIcon: _loading
                 ? const Padding(
@@ -144,7 +140,7 @@ class _ExactLocationWidgetState extends State<ExactLocationWidget> {
           ),
           validator: (_) {
             if (_exactLocationCtrl.text.isEmpty) {
-              return 'Please tap to fetch location';
+              return 'يرجى الضغط للحصول على الموقع';
             }
             return null;
           },

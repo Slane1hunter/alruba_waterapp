@@ -31,8 +31,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
       final user = response.user;
       if (user == null) throw Exception('Authentication failed');
-      
-      // FIXED: Use currentSession instead of getSession()
+
       final session = SupabaseService.client.auth.currentSession;
       debugPrint('Login successful for: ${_emailController.text}');
       debugPrint('User ID: ${user.id}, Session: ${session != null}');
@@ -40,9 +39,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       if (!mounted) return;
       context.go('/');
     } on AuthException catch (e) {
-      _showError('Auth error: ${e.message}');
+      _showError('خطأ في المصادقة: ${e.message}');
     } catch (e) {
-      _showError('Login failed. Please try again.');
+      _showError('فشل تسجيل الدخول. حاول مرة أخرى.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -69,19 +68,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'Water Distribution',
+                'الربى لتوزيع المياه',
                 style: AppTextStyles.headline.copyWith(fontSize: 32),
               ),
               const SizedBox(height: 40),
               TextFormField(
                 controller: _emailController,
                 decoration: const InputDecoration(
-                  labelText: 'Email',
-                  hintText: 'Enter your email',
+                  labelText: 'البريد الإلكتروني',
+                  hintText: 'أدخل بريدك الإلكتروني',
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) =>
-                    value == null || value.isEmpty ? 'Please enter email' : null,
+                    value == null || value.isEmpty ? 'يرجى إدخال البريد الإلكتروني' : null,
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 16),
@@ -89,12 +88,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 controller: _passwordController,
                 obscureText: true,
                 decoration: const InputDecoration(
-                  labelText: 'Password',
-                  hintText: 'Enter your password',
+                  labelText: 'كلمة المرور',
+                  hintText: 'أدخل كلمة المرور',
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) =>
-                    value == null || value.isEmpty ? 'Please enter password' : null,
+                    value == null || value.isEmpty ? 'يرجى إدخال كلمة المرور' : null,
               ),
               const SizedBox(height: 24),
               ElevatedButton(
@@ -106,14 +105,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
                 child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Sign In', style: AppTextStyles.button),
+                    : const Text('تسجيل الدخول', style: AppTextStyles.button),
               ),
               if (_isLoading) const SizedBox(height: 20),
               TextButton(
                 onPressed: () {
                   context.push('/signup');
                 },
-                child: const Text('Create Account'),
+                child: const Text('إنشاء حساب'),
               ),
             ],
           ),

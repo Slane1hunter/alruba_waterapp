@@ -17,13 +17,13 @@ class ProductDropdown extends StatelessWidget {
   Widget build(BuildContext context) {
     return DropdownButtonFormField<Product>(
       decoration: const InputDecoration(
-        labelText: 'Select Product',
+        labelText: 'اختر المنتج',
         border: OutlineInputBorder(),
       ),
       value: selectedProduct,
       items: products.map((p) {
-        // NEW: Show '(Refillable)' if p.isRefillable is true
-        final displayName = p.isRefillable ? '${p.name} (Refillable)' : p.name;
+        // Show '(Refillable)' if p.isRefillable is true
+        final displayName = p.isRefillable ? '${p.name} (قابل لإعادة التعبئة)' : p.name;
 
         return DropdownMenuItem<Product>(
           value: p,
@@ -33,7 +33,7 @@ class ProductDropdown extends StatelessWidget {
       onChanged: onProductChanged,
       validator: (val) {
         if (val == null) {
-          return 'Please select a product';
+          return 'يرجى اختيار المنتج';
         }
         return null;
       },

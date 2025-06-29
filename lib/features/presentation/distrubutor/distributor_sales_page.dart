@@ -41,18 +41,18 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
     final locationsAsync = ref.watch(locationsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Sales')),
+      appBar: AppBar(title: const Text('مبيعاتي')),
       body: Column(
         children: [
           _buildFilterSection(context, locationsAsync),
           Expanded(
             child: salesAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, _) => Center(child: Text('Error: $err')),
+              error: (err, _) => Center(child: Text('خطأ: $err')),
               data: (allSales) {
                 final filtered = _applyFilters(allSales);
                 if (filtered.isEmpty)
-                  return const Center(child: Text('No matching records.'));
+                  return const Center(child: Text('لا توجد سجلات مطابقة.'));
                 return _buildEventsList(filtered);
               },
             ),
@@ -73,7 +73,7 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
           children: [
             TextField(
               decoration: InputDecoration(
-                hintText: 'Search by customer...',
+                hintText: 'ابحث بالاسم العميل...',
                 prefixIcon: const Icon(Icons.search),
                 border:
                     OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -88,7 +88,7 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
                   icon: const Icon(Icons.date_range),
-                  label: const Text('Date Range'),
+                  label: const Text('نطاق التاريخ'),
                   onPressed: () => _pickDateRange(ctx),
                 ),
               ],
@@ -97,7 +97,7 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  '${DateFormat('MMM dd, yyyy').format(_startDate!)} — ${DateFormat('MMM dd, yyyy').format(_endDate!)}',
+                  '${DateFormat('MMM dd, yyyy', 'ar').format(_startDate!)} — ${DateFormat('MMM dd, yyyy', 'ar').format(_endDate!)}',
                   style: TextStyle(color: Theme.of(ctx).colorScheme.primary),
                 ),
               ),
@@ -112,7 +112,7 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
       data: (locations) {
         final items = <DropdownMenuItem<String?>>[
           const DropdownMenuItem<String?>(
-              value: null, child: Text('All Locations')),
+              value: null, child: Text('جميع المواقع')),
           ...locations.map((l) =>
               DropdownMenuItem<String?>(value: l.name, child: Text(l.name))),
         ];
@@ -127,7 +127,7 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Text('Error: $e'),
+      error: (e, _) => Text('خطأ: $e'),
     );
   }
 
@@ -141,6 +141,7 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
           ? DateTimeRange(start: _startDate!, end: _endDate!)
           : DateTimeRange(
               start: now.subtract(const Duration(days: 30)), end: now),
+      locale: const Locale('ar'),
     );
     if (range != null) {
       setState(() {
@@ -212,7 +213,7 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
               tilePadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               title: Text(
-                DateFormat('MMM dd, yyyy').format(DateTime.parse(day)),
+                DateFormat('MMM dd, yyyy', 'ar').format(DateTime.parse(day)),
                 style:
                     const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
@@ -223,7 +224,7 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
                     leading:
                         const Icon(Icons.attach_money, color: Colors.green),
                     title: Text(
-                      'Payment for sale on ${DateFormat('MMM dd').format(e.sale.date.toLocal())}',
+                      'دفع مقابل البيع بتاريخ ${DateFormat('MMM dd', 'ar').format(e.sale.date.toLocal())}',
                     ),
                     subtitle: Text(
                       '${e.sale.customerName} — ${_lbpFormat.format(e.sale.totalAmount)}',
@@ -253,7 +254,7 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
                     title: Text(e.sale.customerName,
                         style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle:
-                        Text('${e.sale.productName} • Qty: ${e.sale.quantity}'),
+                        Text('${e.sale.productName} • الكمية: ${e.sale.quantity}'),
                     trailing: Text(_lbpFormat.format(e.sale.totalAmount)),
                     onTap: () => _showSaleDetailsDialog(e.sale),
                   );
@@ -266,7 +267,7 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
     );
   }
 
-// Helper method to compare dates ignoring time
+  // Helper method to compare dates ignoring time
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
@@ -276,40 +277,40 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          title: Text('Sale for ${sale.customerName}'),
+          title: Text('البيع لـ ${sale.customerName}'),
           content: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                    'Date: ${DateFormat('yyyy-MM-dd HH:mm').format(sale.date.toLocal())}'),
+                    'التاريخ: ${DateFormat('yyyy-MM-dd HH:mm').format(sale.date.toLocal())}'),
                 const SizedBox(height: 4),
-                Text('Product: ${sale.productName}'),
+                Text('المنتج: ${sale.productName}'),
                 const SizedBox(height: 4),
-                Text('Quantity: ${sale.quantity}'),
+                Text('الكمية: ${sale.quantity}'),
                 const SizedBox(height: 4),
-                Text('Price/Unit: ${_lbpFormat.format(sale.pricePerUnit)}'),
+                Text('السعر للوحدة: ${_lbpFormat.format(sale.pricePerUnit)}'),
                 const SizedBox(height: 4),
-                Text('Total: ${_lbpFormat.format(sale.totalAmount)}'),
+                Text('الإجمالي: ${_lbpFormat.format(sale.totalAmount)}'),
                 const SizedBox(height: 4),
-                Text('Status: ${sale.paymentStatus.toUpperCase()}'),
+                Text('الحالة: ${sale.paymentStatus.toUpperCase()}'),
                 const SizedBox(height: 4),
                 Text(
-                  'Paid on: ${sale.paymentDate != null ? DateFormat('yyyy-MM-dd HH:mm').format(sale.paymentDate!) : '—'}',
+                  'تم الدفع في: ${sale.paymentDate != null ? DateFormat('yyyy-MM-dd HH:mm').format(sale.paymentDate!) : '—'}',
                 ),
                 const SizedBox(height: 4),
-                Text('Location: ${sale.location}'),
+                Text('الموقع: ${sale.location}'),
                 const SizedBox(height: 12),
                 if (sale.phone.isNotEmpty)
                   ElevatedButton.icon(
                     icon: const Icon(Icons.call),
-                    label: const Text('Call Customer'),
+                    label: const Text('اتصل بالعميل'),
                     onPressed: () => _openDialer(sale.phone),
                   ),
                 if (sale.preciseLocation != null)
                   ElevatedButton.icon(
                     icon: const Icon(Icons.map),
-                    label: const Text('Open in Maps'),
+                    label: const Text('افتح في الخرائط'),
                     onPressed: () => _openInMaps(sale.preciseLocation!),
                   ),
               ],
@@ -317,7 +318,7 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
+                onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق'))
           ],
         );
       },

@@ -34,11 +34,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Expenses Overview'),
+        title: const Text('نظرة عامة على المصاريف'),
         actions: [
           IconButton(
             icon: const Icon(Icons.filter_alt),
-            tooltip: 'Clear filter',
+            tooltip: 'إزالة الفلتر',
             onPressed: _selectedTypeFilter == null
                 ? null
                 : () => setState(() => _selectedTypeFilter = null),
@@ -77,7 +77,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
               ElevatedButton(
                 onPressed: () =>
                     ref.read(expenseProvider.notifier).loadExpenses(),
-                child: const Text('Retry'),
+                child: const Text('إعادة المحاولة'),
               ),
             ],
           ),
@@ -85,7 +85,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
       );
     }
     if (state.expenses.isEmpty) {
-      return const Center(child: Text('No expenses found'));
+      return const Text('لم يتم العثور على مصاريف');
     }
 
     final filtered = _selectedTypeFilter == null
@@ -99,8 +99,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
       (Expense e) => DateTime(e.date.year, e.date.month),
     );
 
-    final months = grouped.keys.toList()
-      ..sort((a, b) => b.compareTo(a));
+    final months = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
 
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -156,16 +155,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           child: Row(
             children: [
               ChoiceChip(
-                label: const Text('All'),
+                label: const Text('كل الأنواع'),
                 selected: _selectedTypeFilter == null,
-                onSelected: (_) =>
-                    setState(() => _selectedTypeFilter = null),
+                onSelected: (_) => setState(() => _selectedTypeFilter = null),
               ),
               ...types.map((t) => Padding(
                     padding: const EdgeInsets.only(left: 8),
                     child: ChoiceChip(
-                      label:
-                          Text(toBeginningOfSentenceCase(t) ?? t),
+                      label: Text(toBeginningOfSentenceCase(t) ?? t),
                       selected: _selectedTypeFilter == t,
                       onSelected: (_) =>
                           setState(() => _selectedTypeFilter = t),
@@ -186,8 +183,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     _openExpenseForm(context, exp);
   }
 
-  Future<void> _openExpenseForm(
-      BuildContext context, Expense? expense) {
+  Future<void> _openExpenseForm(BuildContext context, Expense? expense) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -208,9 +204,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
             if (expense == null) {
               await ref.read(expenseProvider.notifier).addExpense(exp);
             } else {
-              await ref
-                  .read(expenseProvider.notifier)
-                  .updateExpense(exp);
+              await ref.read(expenseProvider.notifier).updateExpense(exp);
             }
             ref.invalidate(expenseTypesProvider);
             if (ctx.mounted) Navigator.pop(ctx);
@@ -228,8 +222,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           content: const Text('Expense deleted'),
           action: SnackBarAction(
             label: 'Undo',
-            onPressed: () =>
-                ref.read(expenseProvider.notifier).addExpense(exp),
+            onPressed: () => ref.read(expenseProvider.notifier).addExpense(exp),
           ),
         ),
       );
@@ -282,22 +275,20 @@ class _MonthHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final totalAmount =
-        expenses.fold<double>(0, (sum, e) => sum + e.amount);
+    final totalAmount = expenses.fold<double>(0, (sum, e) => sum + e.amount);
 
     return Container(
       color: theme.scaffoldBackgroundColor,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          Text(DateFormat('MMMM y').format(month),
+          Text(DateFormat('MMMM y', 'ar').format(month),
               style: theme.textTheme.titleMedium),
           const Spacer(),
           Chip(
             label: Text(currencyFormat.format(totalAmount)),
             backgroundColor: Colors.green.shade100,
-            avatar: const Icon(Icons.summarize,
-                size: 18, color: Colors.green),
+            avatar: const Icon(Icons.summarize, size: 18, color: Colors.green),
           ),
         ],
       ),
@@ -334,13 +325,11 @@ class _ExpenseItem extends StatelessWidget {
         elevation: 2,
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
         child: ListTile(
-          title:
-              Text(toBeginningOfSentenceCase(expense.type) ?? expense.type),
+          title: Text(toBeginningOfSentenceCase(expense.type) ?? expense.type),
           subtitle: Text(
             [
-              DateFormat.yMMMd().format(expense.date),
-              if (expense.description?.isNotEmpty ?? false)
-                expense.description!
+              DateFormat.yMMMd('ar').format(expense.date),
+              if (expense.description?.isNotEmpty ?? false) expense.description!
             ].join(' • '),
           ),
           trailing: Text(
@@ -385,8 +374,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
     _type = widget.expense?.type;
     _amountCtrl = TextEditingController(
         text: widget.expense?.amount.toStringAsFixed(2) ?? '');
-    _descCtrl =
-        TextEditingController(text: widget.expense?.description ?? '');
+    _descCtrl = TextEditingController(text: widget.expense?.description ?? '');
     _date = widget.expense?.date ?? DateTime.now();
   }
 
@@ -407,11 +395,9 @@ class _ExpenseFormState extends State<_ExpenseForm> {
         children: [
           Text(
             widget.expense == null ? 'Add Expense' : 'Edit Expense',
-            style: const TextStyle(
-                fontSize: 18, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-
           Consumer(builder: (context, ref, _) {
             final asyncTypes = ref.watch(expenseTypesProvider);
             return asyncTypes.when(
@@ -423,7 +409,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
                   DropdownButtonFormField<String>(
                     value: _type,
                     decoration: const InputDecoration(
-                      labelText: 'Type',
+                      labelText: 'النوع',
                       border: OutlineInputBorder(),
                     ),
                     items: [
@@ -433,7 +419,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
                           )),
                       const DropdownMenuItem(
                         value: '_add_new_',
-                        child: Text('Add new type…'),
+                        child: Text('نوع جديد...'),
                       ),
                     ],
                     onChanged: (val) {
@@ -463,7 +449,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
                       child: TextFormField(
                         controller: _newTypeCtrl,
                         decoration: const InputDecoration(
-                          labelText: 'New type',
+                          labelText: 'نوع جديد',
                           border: OutlineInputBorder(),
                         ),
                         validator: (v) {
@@ -479,18 +465,15 @@ class _ExpenseFormState extends State<_ExpenseForm> {
               ),
             );
           }),
-
           const SizedBox(height: 12),
-
           TextFormField(
             controller: _amountCtrl,
             decoration: const InputDecoration(
-              labelText: 'Amount',
+              labelText: 'المبلغ',
               border: OutlineInputBorder(),
               prefixText: 'LBP ',
             ),
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [ThousandsFormatter()],
             validator: (v) {
               if (v == null || v.isEmpty) return 'Required';
@@ -500,28 +483,23 @@ class _ExpenseFormState extends State<_ExpenseForm> {
               return null;
             },
           ),
-
           const SizedBox(height: 12),
-
           TextFormField(
             controller: _descCtrl,
             decoration: const InputDecoration(
-              labelText: 'Description (optional)',
+              labelText: 'الوصف (اختياري)',
               border: OutlineInputBorder(),
             ),
             minLines: 1,
             maxLines: 3,
           ),
-
           const SizedBox(height: 12),
-
           ListTile(
             tileColor: Colors.grey.shade200,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
-            title:
-                Text('Date: ${DateFormat.yMMMd().format(_date)}'),
+            title: Text('Date: ${DateFormat.yMMMd('ar').format(_date)}'),
             trailing: const Icon(Icons.calendar_today),
             onTap: () async {
               final picked = await showDatePicker(
@@ -533,14 +511,10 @@ class _ExpenseFormState extends State<_ExpenseForm> {
               if (picked != null) setState(() => _date = picked);
             },
           ),
-
           const SizedBox(height: 20),
-
           ElevatedButton.icon(
             icon: const Icon(Icons.save),
-            label: Text(widget.expense == null
-                ? 'Add Expense'
-                : 'Save'),
+            label: Text(widget.expense == null ? 'Add Expense' : 'Save'),
             onPressed: _submit,
             style: ElevatedButton.styleFrom(
               minimumSize: const Size(double.infinity, 48),
@@ -554,8 +528,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
   void _submit() {
     if (!_key.currentState!.validate()) return;
 
-    final typeStr =
-        _addingNewType ? _newTypeCtrl.text.trim() : _type!;
+    final typeStr = _addingNewType ? _newTypeCtrl.text.trim() : _type!;
     final raw = toNumericString(_amountCtrl.text);
     final amount = double.parse(raw);
 
@@ -568,8 +541,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
         date: _date,
         isRecurring: widget.expense?.isRecurring ?? false,
         recurrenceEnd: widget.expense?.recurrenceEnd,
-        createdAt:
-            widget.expense?.createdAt ?? DateTime.now(),
+        createdAt: widget.expense?.createdAt ?? DateTime.now(),
       ),
     );
   }

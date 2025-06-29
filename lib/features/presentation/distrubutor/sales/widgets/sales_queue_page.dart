@@ -21,50 +21,43 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
   // LBP currency formatter
   final _lbpFormat = NumberFormat.currency(
     locale: 'ar_LB',
-    symbol: 'LBP ',
+    symbol: 'ل.ل',
+    name: '',             // Prevent LPB from being added
     decimalDigits: 0,
+    customPattern: '#,##0 ¤', // Number then currency
   );
 
-    Future<void> _syncSales() async {
-  setState(() {
-    _isSyncing = true;
-  });
-  try {
-    // 1) Grab the local queue before syncing (so we can iterate later)
-    final salesBox = Hive.box<OfflineSale>('offline_sales');
-    // ignore: unused_local_variable
-    final List<OfflineSale> localSales = salesBox.values.toList();
-
-    // 2) Push all offline data (customers, sales, gallons…) to Supabase.
-    //    Your syncOfflineData() should write back `serverId` into each OfflineSale.
-    await OfflineSyncService().syncOfflineData();
-
-    // 3) Refresh any dependent Riverpod providers
-    ref.invalidate(customersProvider);
-    ref.invalidate(distributorSalesProvider);
-    
-
-    // 5) Now that everything is in Supabase, clear the local queue
-    await salesBox.clear();
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sync completed successfully!')),
-    );
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Sync failed: $e')),
-    );
-  } finally {
+  Future<void> _syncSales() async {
     setState(() {
-      _isSyncing = false;
+      _isSyncing = true;
     });
-  }
-}
+    try {
+      final salesBox = Hive.box<OfflineSale>('offline_sales');
+      final List<OfflineSale> localSales = salesBox.values.toList();
 
+      await OfflineSyncService().syncOfflineData();
+
+      ref.invalidate(customersProvider);
+      ref.invalidate(distributorSalesProvider);
+
+      await salesBox.clear();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تمت المزامنة بنجاح!')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('فشلت المزامنة: $e')),
+      );
+    } finally {
+      setState(() {
+        _isSyncing = false;
+      });
+    }
+  }
 
   Future<void> _clearQueue() async {
-    // Clear both sales and gallon transactions
     final saleBox = Hive.box<OfflineSale>('offline_sales');
     await saleBox.clear();
 
@@ -76,7 +69,6 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
     setState(() {});
   }
 
-  /// Shows a detailed dialog for a sale.
   void _showSaleDetails(OfflineSale sale) {
     final formattedDate =
         DateFormat('yyyy-MM-dd hh:mm a').format(sale.createdAt);
@@ -89,14 +81,14 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           title: Text(
-            sale.customerName ?? 'Unknown Customer',
+            sale.customerName ?? 'عميل غير معروف',
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           content: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Phone: $phoneNumber',
+                Text('الهاتف: $phoneNumber',
                     style: const TextStyle(fontSize: 16, color: Colors.grey)),
                 const SizedBox(height: 10),
                 const Divider(thickness: 1.2),
@@ -104,15 +96,15 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Product: ',
+                    const Text('المنتج: ',
                         style: TextStyle(fontWeight: FontWeight.bold)),
-                    Expanded(child: Text(sale.productName ?? 'No Product')),
+                    Expanded(child: Text(sale.productName ?? 'لا يوجد منتج')),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text('Quantity: ',
+                    const Text('الكمية: ',
                         style: TextStyle(fontWeight: FontWeight.bold)),
                     Text('${sale.quantity}'),
                   ],
@@ -120,7 +112,7 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text('Price/Unit: ',
+                    const Text('السعر لكل وحدة: ',
                         style: TextStyle(fontWeight: FontWeight.bold)),
                     Text(_lbpFormat.format(sale.pricePerUnit)),
                   ],
@@ -128,7 +120,7 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text('Total: ',
+                    const Text('الإجمالي: ',
                         style: TextStyle(fontWeight: FontWeight.bold)),
                     Text(_lbpFormat.format(sale.totalPrice)),
                   ],
@@ -136,7 +128,7 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text('Payment: ',
+                    const Text('الدفع: ',
                         style: TextStyle(fontWeight: FontWeight.bold)),
                     Text(sale.paymentStatus),
                   ],
@@ -144,7 +136,7 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Text('Created At: ',
+                    const Text('تاريخ الإنشاء: ',
                         style: TextStyle(fontWeight: FontWeight.bold)),
                     Text(formattedDate),
                   ],
@@ -155,7 +147,7 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
+              child: const Text('إغلاق'),
             ),
           ],
         );
@@ -165,14 +157,12 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
 
   @override
   Widget build(BuildContext context) {
-    // Read unsynced sale count from Hive box
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Today's Sales Queue"),
+        title: const Text("قائمة مبيعات اليوم"),
       ),
       body: Column(
         children: [
-          // Sync and Clear buttons row
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
@@ -195,7 +185,8 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                             ),
                           )
                         : const Icon(Icons.cloud_upload),
-                    label: Text(_isSyncing ? 'Syncing...' : 'Sync All'),
+                    label:
+                        Text(_isSyncing ? 'جارٍ المزامنة...' : 'مزامنة الكل'),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -211,17 +202,17 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                         builder: (ctx) => AlertDialog(
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),
-                          title: const Text('Clear Queue'),
+                          title: const Text('مسح القائمة'),
                           content: const Text(
-                              'Are you sure you want to remove all unsynced sales?'),
+                              'هل أنت متأكد من حذف جميع المبيعات غير المتزامنة؟'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(ctx, false),
-                              child: const Text('Cancel'),
+                              child: const Text('إلغاء'),
                             ),
                             ElevatedButton(
                               onPressed: () => Navigator.pop(ctx, true),
-                              child: const Text('Confirm'),
+                              child: const Text('تأكيد'),
                             ),
                           ],
                         ),
@@ -231,13 +222,12 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                       }
                     },
                     icon: const Icon(Icons.delete_forever),
-                    label: const Text('Clear All'),
+                    label: const Text('مسح الكل'),
                   ),
                 ),
               ],
             ),
           ),
-          // List of unsynced sales
           Expanded(
             child: ValueListenableBuilder<Box<OfflineSale>>(
               valueListenable:
@@ -247,7 +237,7 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                 if (unsyncedSales.isEmpty) {
                   return const Center(
                     child: Text(
-                      'No unsynced sales!',
+                      'لا توجد مبيعات غير متزامنة!',
                       style: TextStyle(fontSize: 18),
                     ),
                   );
@@ -256,9 +246,8 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                   itemCount: unsyncedSales.length,
                   itemBuilder: (context, index) {
                     final sale = unsyncedSales[index];
-                    final customerLabel =
-                        sale.customerName ?? 'Unknown Customer';
-                    final productLabel = sale.productName ?? 'No Product';
+                    final customerLabel = sale.customerName ?? 'عميل غير معروف';
+                    final productLabel = sale.productName ?? 'لا يوجد منتج';
                     return Card(
                       margin: const EdgeInsets.all(8),
                       elevation: 3,
@@ -272,10 +261,8 @@ class _SalesQueuePageState extends ConsumerState<SalesQueuePage> {
                           customerLabel,
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        subtitle: Text(
-                          'Product: $productLabel\n'
-                          'Qty: ${sale.quantity} | ${_lbpFormat.format(sale.pricePerUnit)}',
-                        ),
+                        subtitle: Text('المنتج: $productLabel\n'
+                            'الكمية: ${sale.quantity} | السعر: ${_lbpFormat.format(sale.pricePerUnit)}'),
                         trailing: Text(
                           _lbpFormat.format(sale.totalPrice),
                           style: const TextStyle(fontWeight: FontWeight.bold),

@@ -9,7 +9,7 @@ class SaleFormSubmitButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return ElevatedButton.icon(
       icon: const Icon(Icons.add),
-      label: const Text('Add Sale'),
+      label: const Text('إضافة بيع'),
       style: ElevatedButton.styleFrom(
         minimumSize: const Size(double.infinity, 50),
       ),

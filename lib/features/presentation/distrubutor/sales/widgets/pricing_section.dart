@@ -30,7 +30,7 @@ class PricingSection extends StatelessWidget {
             Icon(Icons.price_change_outlined, size: 20),
             SizedBox(width: 8),
             Text(
-              'Pricing',
+              'التسعير',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ],
@@ -39,17 +39,17 @@ class PricingSection extends StatelessWidget {
         TextFormField(
           controller: priceController,
           decoration: const InputDecoration(
-            labelText: 'Price Per Gallon',
-            hintText: 'e.g., 2500',
+            labelText: 'السعر لكل وحدة',
+            hintText: 'مثلاً، ٢٥٠٠',
             border: OutlineInputBorder(),
           ),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           validator: (val) {
             if (val == null || val.isEmpty) {
-              return 'Please enter the price per gallon';
+              return 'يرجى إدخال سعر الوحدة';
             }
             if (double.tryParse(val) == null) {
-              return 'Enter a valid number';
+              return 'أدخل رقمًا صحيحًا';
             }
             return null;
           },
@@ -58,8 +58,8 @@ class PricingSection extends StatelessWidget {
         TextFormField(
           controller: quantityController,
           decoration: const InputDecoration(
-            labelText: 'Quantity (gallons)',
-            hintText: 'Enter quantity',
+            labelText: 'الكمية',
+            hintText: 'أدخل الكمية',
             border: OutlineInputBorder(),
           ),
           keyboardType: TextInputType.number,
@@ -70,17 +70,17 @@ class PricingSection extends StatelessWidget {
           },
           validator: (val) {
             if (val == null || val.isEmpty) {
-              return 'Please enter a quantity';
+              return 'يرجى إدخال الكمية';
             }
             if (int.tryParse(val) == null || int.parse(val) <= 0) {
-              return 'Enter a valid quantity';
+              return 'أدخل كمية صحيحة';
             }
             return null;
           },
         ),
         const SizedBox(height: 16),
         Text(
-          'Total Price: ${_lbpFormat.format(totalPrice)}',
+          'السعر الإجمالي: ${_lbpFormat.format(totalPrice)}',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ],

@@ -2,18 +2,13 @@ import 'dart:io';
 
 import 'package:excel/excel.dart' as xls;
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:intl/intl.dart' show DateFormat, NumberFormat;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 
-
-/// ---------------------------------------------------------------------------
-/// OwnerDashboardPage – displays monthly & daily financial performance.
-/// Logic for fetching / processing data is unchanged; only UI
-/// and minor structural improvements were made for better efficiency.
-/// ---------------------------------------------------------------------------
+/// لوحة تحكم المالك - تعرض الأداء المالي الشهري واليومي
+/// تمت ترجمة الواجهة بالكامل للغة العربية مع دعم التخطيط من اليمين لليسار
 class OwnerDashboardPage extends StatefulWidget {
   const OwnerDashboardPage({super.key});
 
@@ -24,16 +19,16 @@ class OwnerDashboardPage extends StatefulWidget {
 class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
   final SupabaseClient _supabase = Supabase.instance.client;
   final NumberFormat _currency =
-      NumberFormat.currency(symbol: 'LBP ', decimalDigits: 0);
+      NumberFormat.currency(locale: 'ar_LB', symbol: 'ل.ل ', decimalDigits: 0);
 
-  /// Raw data holders ---------------------------------------------------------
+  /// حوامل البيانات الخام -----------------------------------------------------
   List<Map<String, dynamic>> _dailySales = [];
   List<Map<String, dynamic>> _expenses = [];
   List<Map<String, dynamic>> _monthlySummary = [];
   bool _isLoading = true;
 
   // ──────────────────────────────────────────────────────────────────────────
-  // LIFECYCLE
+  // دورة الحياة
   // ──────────────────────────────────────────────────────────────────────────
   @override
   void initState() {
@@ -42,7 +37,7 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // DATA FETCHING
+  // جلب البيانات
   // ──────────────────────────────────────────────────────────────────────────
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
@@ -56,7 +51,7 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Error loading data: $e'),
+              content: Text('خطأ في تحميل البيانات: $e'),
               backgroundColor: Colors.red),
         );
       }
@@ -67,10 +62,17 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
 
   Future<void> _fetchDailySales() async {
     final raw = await _supabase.from('sales').select(r'''
+        created_at,
         payment_date,
         quantity,
         price_per_unit,
-        products:products!sales_product_id_fkey (id, name, production_cost)
+        total_amount,
+        payment_status,
+        customer:customers!sales_customer_id_fkey (name, phone),
+        product:products!sales_product_id_fkey (name, production_cost),
+        location:locations!sales_location_id_fkey (name),
+        sold_by,
+        seller:profiles!sold_by (first_name, last_name)
       ''').eq('payment_status', 'paid').order('payment_date', ascending: false);
 
     final Map<String, Map<String, dynamic>> grouped = {};
@@ -88,14 +90,15 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
                 'revenue': 0.0,
                 'cogs': 0.0,
                 'products': <Map<String, dynamic>>[],
+                'rawSales': <Map<String, dynamic>>[],
               });
 
       final entry = grouped[key]!;
       final qty = (sale['quantity'] as num?)?.toDouble() ?? 0.0;
       final price = (sale['price_per_unit'] as num?)?.toDouble() ?? 0.0;
-      final prod = sale['products'] as Map<String, dynamic>? ?? {};
+      final prod = sale['product'] as Map<String, dynamic>? ?? {};
       final cost = (prod['production_cost'] as num?)?.toDouble() ?? 0.0;
-      final name = (prod['name'] as String?) ?? 'Unknown Product';
+      final name = (prod['name'] as String?) ?? 'منتج غير معروف';
 
       entry['revenue'] = (entry['revenue'] as double) + qty * price;
       entry['cogs'] = (entry['cogs'] as double) + qty * cost;
@@ -104,6 +107,7 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
         'quantity': qty,
         'total': qty * price,
       });
+      (entry['rawSales'] as List).add(sale);
     }
 
     if (mounted) {
@@ -114,7 +118,7 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
   Future<void> _fetchExpenses() async {
     final raw = await _supabase
         .from('expenses')
-        .select(r'date, amount')
+        .select(r'date, amount, description') // Added description
         .order('date', ascending: false);
 
     if (mounted) {
@@ -123,6 +127,7 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
             .map((e) => {
                   'date': e['date'] as String,
                   'amount': (e['amount'] as num?)?.toDouble() ?? 0.0,
+                  'description': e['description'] as String? ?? 'بدون وصف',
                 })
             .toList();
       });
@@ -130,105 +135,111 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // AGGREGATION
+  // تجميع البيانات
   // ──────────────────────────────────────────────────────────────────────────
   void _buildMonthlySummary() {
-    final Map<String, Map<String, dynamic>> monthly = {};
+  final Map<String, Map<String, dynamic>> monthly = {};
 
-    for (final day in _dailySales) {
-      final dt = DateTime.parse(day['date'] as String);
-      final key = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+  for (final day in _dailySales) {
+    final dt = DateTime.parse(day['date'] as String);
+    final key = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
 
-      monthly.putIfAbsent(
-          key,
-          () => {
-                'month': key,
-                'revenue': 0.0,
-                'cogs': 0.0,
-                'expenses': 0.0,
-                'net_profit': 0.0,
-                'products': <String, Map<String, dynamic>>{},
-              });
+    monthly.putIfAbsent(
+        key,
+        () => {
+              'month': key,
+              'revenue': 0.0,
+              'cogs': 0.0,
+              'expenses': 0.0, // Ensure this exists
+              'net_profit': 0.0,
+              'products': <String, Map<String, dynamic>>{},
+            });
 
-      final m = monthly[key]!;
-      m['revenue'] = (m['revenue'] as double) + (day['revenue'] as double);
-      m['cogs'] = (m['cogs'] as double) + (day['cogs'] as double);
+    final m = monthly[key]!;
+    m['revenue'] = (m['revenue'] as double) + (day['revenue'] as double);
+    m['cogs'] = (m['cogs'] as double) + (day['cogs'] as double);
 
-      for (final p in day['products'] as List<dynamic>) {
-        final name = p['name'] as String;
-        final prodMap = m['products'] as Map<String, Map<String, dynamic>>;
-        prodMap.putIfAbsent(name, () => {'quantity': 0.0, 'total': 0.0});
-        prodMap[name]!['quantity'] =
-            (prodMap[name]!['quantity'] as double) + (p['quantity'] as double);
-        prodMap[name]!['total'] =
-            (prodMap[name]!['total'] as double) + (p['total'] as double);
-      }
+    for (final p in day['products'] as List<dynamic>) {
+      final name = p['name'] as String;
+      final prodMap = m['products'] as Map<String, Map<String, dynamic>>;
+      prodMap.putIfAbsent(name, () => {'quantity': 0.0, 'total': 0.0});
+      prodMap[name]!['quantity'] =
+          (prodMap[name]!['quantity'] as double) + (p['quantity'] as double);
+      prodMap[name]!['total'] =
+          (prodMap[name]!['total'] as double) + (p['total'] as double);
     }
-
-    for (final exp in _expenses) {
-      final dt = DateTime.parse(exp['date'] as String);
-      final key = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
-      if (monthly.containsKey(key)) {
-        monthly[key]!['expenses'] =
-            (monthly[key]!['expenses'] as double) + (exp['amount'] as double);
-      }
-    }
-
-    for (final m in monthly.values) {
-      final gross = (m['revenue'] as double) - (m['cogs'] as double);
-      m['net_profit'] = gross - (m['expenses'] as double);
-    }
-
-    if (mounted) setState(() => _monthlySummary = monthly.values.toList());
   }
 
+  // Process expenses
+  for (final exp in _expenses) {
+    final dt = DateTime.parse(exp['date'] as String);
+    final key = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+    if (monthly.containsKey(key)) {
+      monthly[key]!['expenses'] =
+          (monthly[key]!['expenses'] as double) + (exp['amount'] as double);
+    }
+  }
+
+  // Calculate net profit
+  for (final m in monthly.values) {
+    final gross = (m['revenue'] as double) - (m['cogs'] as double);
+    m['net_profit'] = gross - (m['expenses'] as double);
+  }
+
+  if (mounted) setState(() => _monthlySummary = monthly.values.toList());
+}
+
   // ──────────────────────────────────────────────────────────────────────────
-  // UI
+  // واجهة المستخدم
   // ──────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Owner Dashboard'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
-          ),
-          IconButton(
-            icon: const Icon(Icons.download),
-            tooltip: 'Export Yearly Report',
-            onPressed: _monthlySummary.isEmpty ? null : _exportYearlyExcel,
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: _monthlySummary.isEmpty
-                  ? ListView(
-                      children: const [
-                        SizedBox(height: 120),
-                        Center(child: Text('No data to display')),
-                      ],
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _monthlySummary.length,
-                      itemBuilder: (context, index) => _buildMonthCard(
-                        _monthlySummary[index],
-                        cs,
-                      ),
-                    ),
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('لوحة تحكم المالك'),
+          centerTitle: true,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadData,
+              tooltip: 'تحديث البيانات',
             ),
+            IconButton(
+              icon: const Icon(Icons.download),
+              tooltip: 'تصدير تقرير سنوي',
+              onPressed: _monthlySummary.isEmpty ? null : _exportYearlyExcel,
+            ),
+          ],
+        ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
+                onRefresh: _loadData,
+                child: _monthlySummary.isEmpty
+                    ? ListView(
+                        children: const [
+                          SizedBox(height: 120),
+                          Center(child: Text('لا توجد بيانات للعرض')),
+                        ],
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _monthlySummary.length,
+                        itemBuilder: (context, index) => _buildMonthCard(
+                          _monthlySummary[index],
+                          cs,
+                        ),
+                      ),
+              ),
+      ),
     );
   }
 
-  // Monthly card -------------------------------------------------------------
+  // بطاقة الشهر -------------------------------------------------------------
   Widget _buildMonthCard(Map<String, dynamic> m, ColorScheme cs) {
     final monthDt = DateTime.parse('${m['month']}-01');
     final monthKey = m['month'] as String;
@@ -255,23 +266,38 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
         leading: Icon(Icons.bar_chart, color: cs.primary),
         tilePadding: const EdgeInsets.symmetric(horizontal: 16),
         childrenPadding: const EdgeInsets.only(bottom: 16),
-        title: Text(DateFormat('MMMM yyyy').format(monthDt),
-            style: TextStyle(fontWeight: FontWeight.w600, color: cs.onSurface)),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                DateFormat('MMMM yyyy', 'ar').format(monthDt),
+                style:
+                    TextStyle(fontWeight: FontWeight.w600, color: cs.onSurface),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.download),
+              onPressed: () => _exportMonthlyExcel(m),
+              tooltip: 'تصدير التقرير الشهري',
+            ),
+          ],
+        ),
         subtitle: _buildProfitIndicator(m['net_profit'] as double, cs),
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
-                _buildMetricRow('Revenue', m['revenue'] as double, cs: cs),
-                _buildMetricRow('COGS', m['cogs'] as double, cs: cs),
-                _buildMetricRow('Expenses', m['expenses'] as double, cs: cs),
-                _buildMetricRow('Net Profit', m['net_profit'] as double,
+                _buildMetricRow('الإيرادات', m['revenue'] as double, cs: cs),
+                _buildMetricRow('تكلفة البضاعة المباعة', m['cogs'] as double,
+                    cs: cs),
+                _buildMetricRow('المصروفات', m['expenses'] as double, cs: cs),
+                _buildMetricRow('صافي الربح', m['net_profit'] as double,
                     isTotal: true, cs: cs),
                 const SizedBox(height: 16),
                 _buildProductSummary(
                     m['products'] as Map<String, Map<String, dynamic>>,
-                    'Monthly Product Summary',
+                    'ملخص المنتجات الشهري',
                     cs),
                 const SizedBox(height: 16),
                 ...daily.map((d) => _buildDayTile(d, cs)),
@@ -283,7 +309,7 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
     );
   }
 
-  // Day tile -----------------------------------------------------------------
+  // بطاقة اليوم -----------------------------------------------------------------
   Widget _buildDayTile(Map<String, dynamic> d, ColorScheme cs) {
     final dt = DateTime.parse(d['date'] as String);
     final Map<String, Map<String, dynamic>> dailyProd = {
@@ -300,14 +326,15 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
         ),
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-          title: Text(DateFormat('EEE, MMM d').format(dt)),
+          title: Text(DateFormat('EEE, MMM d', 'ar').format(dt)),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _MiniMetric(label: 'Rev', value: d['revenue'] as double, cs: cs),
-              _MiniMetric(label: 'COGS', value: d['cogs'] as double, cs: cs),
               _MiniMetric(
-                label: 'Profit',
+                  label: 'إيراد', value: d['revenue'] as double, cs: cs),
+              _MiniMetric(label: 'تكلفة', value: d['cogs'] as double, cs: cs),
+              _MiniMetric(
+                label: 'ربح',
                 value: (d['revenue'] as double) - (d['cogs'] as double),
                 cs: cs,
                 isProfit: true,
@@ -316,25 +343,25 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
                 padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 8),
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.download),
-                  label: const Text('Download Daily Report'),
+                  label: const Text('تحميل التقرير اليومي'),
                   onPressed: () => _exportSingleDayExcel(d),
                 ),
               ),
             ],
           ),
           children: [
-            _buildProductSummary(dailyProd, 'Daily Product Summary', cs,
+            _buildProductSummary(dailyProd, 'ملخص المنتجات اليومي', cs,
                 isDaily: true),
           ],
         ));
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // REUSABLE WIDGETS
+  // عناصر واجهة قابلة لإعادة الاستخدام
   // ──────────────────────────────────────────────────────────────────────────
   Widget _buildMetricRow(String label, double value,
       {bool isTotal = false, required ColorScheme cs}) {
-    final isProfit = label.toLowerCase().contains('profit');
+    final isProfit = label.toLowerCase().contains('ربح');
     final color = isProfit
         ? (value >= 0 ? cs.tertiary : Colors.red.shade700)
         : cs.onSurface;
@@ -407,17 +434,17 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
                     children: [
                       Padding(
                         padding: EdgeInsets.only(bottom: 8),
-                        child: Text('Product',
+                        child: Text('المنتج',
                             style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                       Padding(
                         padding: EdgeInsets.only(bottom: 8),
-                        child: Text('Quantity',
+                        child: Text('الكمية',
                             style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                       Padding(
                         padding: EdgeInsets.only(bottom: 8),
-                        child: Text('Total',
+                        child: Text('المجموع',
                             style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ],
@@ -449,102 +476,370 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
   }
 
   Future<void> _exportSingleDayExcel(Map<String, dynamic> day) async {
-  if (!await requestStoragePermission(context)) return;
+    if (!await requestStoragePermission(context)) return;
 
-  final excel = xls.Excel.createExcel();
-  final sheet = excel['Day Summary'];
+    try {
+      final excel = xls.Excel.createExcel();
+      final sheet = excel['Day Summary'];
 
-  final date = day['date'] as String;
-  final revenue = day['revenue'] as double;
-  final cogs = day['cogs'] as double;
-  final profit = revenue - cogs;
-  final products = day['products'] as List<dynamic>;
+      final date = day['date'] as String;
+      final revenue = day['revenue'] as double;
+      final cogs = day['cogs'] as double;
+      final profit = revenue - cogs;
+      final products = day['products'] as List<dynamic>;
+      final rawSales = day['rawSales'] as List<dynamic>;
 
-  sheet.appendRow(['Date', date]);
-  sheet.appendRow([]);
-  sheet.appendRow(['Product', 'Quantity', 'Total']);
+      // Get daily expenses
+      final dayExpenses = _expenses.where((e) => e['date'] == date).toList();
+      final totalExpenses = dayExpenses.fold<double>(
+          0, (sum, exp) => sum + (exp['amount'] as double));
 
-  for (final p in products) {
-    sheet.appendRow([p['name'], p['quantity'], p['total']]);
-  }
+      // Header with date
+      sheet.appendRow(['التقرير اليومي', '']);
+      sheet.appendRow(['التاريخ', date]);
+      sheet.appendRow(['']);
 
-  sheet.appendRow([]);
-  sheet.appendRow(['Revenue', revenue]);
-  sheet.appendRow(['COGS', cogs]);
-  sheet.appendRow(['Profit', profit]);
+      // Summary section
+      sheet.appendRow(['الملخص اليومي', '']);
+      sheet.appendRow(['الإيرادات', revenue]);
+      sheet.appendRow(['تكلفة البضاعة المباعة', cogs]);
+      sheet.appendRow(['الربح', profit]);
+      sheet.appendRow(['المصروفات', totalExpenses]);
+      sheet.appendRow(['صافي الربح بعد المصروفات', profit - totalExpenses]);
+      sheet.appendRow(['']);
 
-  final fileBytes = excel.encode();
+      // Products sold section
+      sheet.appendRow(['المنتجات المباعة', '']);
+      sheet.appendRow(['المنتج', 'الكمية', 'المجموع']);
 
-  final downloadsDir = Directory('/storage/emulated/0/Download/alrubaspreadsheet');
-  if (!await downloadsDir.exists()) {
-    await downloadsDir.create(recursive: true);
-  }
+      for (final p in products) {
+        sheet.appendRow([p['name'], p['quantity'], p['total']]);
+      }
+      sheet.appendRow(['']);
 
-  final filePath = '${downloadsDir.path}/day_$date.xlsx';
-  final file = File(filePath)..createSync(recursive: true);
-  file.writeAsBytesSync(fileBytes!);
-  print('Excel file saved at: $filePath');
-
-  if (mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Exported day file to: $filePath')),
-    );
-  }
-}
-
-
- Future<void> _exportYearlyExcel() async {
-  if (!await requestStoragePermission(context)) return;
-
-  final excel = xls.Excel.createExcel();
-
-  for (final month in _monthlySummary) {
-    final sheet = excel[month['month']];
-    final monthTitle = DateFormat('MMMM yyyy')
-        .format(DateTime.parse('${month['month']}-01'));
-
-    sheet.appendRow(['Month', monthTitle]);
-    sheet.appendRow([]);
-    sheet.appendRow(['Product', 'Quantity', 'Total']);
-
-    final products = month['products'] as Map<String, Map<String, dynamic>>;
-    for (final entry in products.entries) {
+      // Detailed sales section
+      sheet.appendRow(['التفاصيل الكاملة للمبيعات', '']);
       sheet.appendRow([
-        entry.key,
-        entry.value['quantity'],
-        entry.value['total'],
+        'الوقت',
+        'العميل',
+        'المنتج',
+        'الكمية',
+        'السعر',
+        'المجموع',
+        'حالة الدفع',
+        'البائع',
+        'الموقع'
       ]);
+
+      for (final sale in rawSales) {
+        final createdAt = DateFormat('HH:mm')
+            .format(DateTime.parse(sale['created_at']).toLocal());
+        final customer = sale['customer']?['name']?.toString() ?? 'غير معروف';
+        final product = sale['product']?['name']?.toString() ?? 'غير معروف';
+        final quantity = sale['quantity'];
+        final price = sale['price_per_unit'];
+        final total = sale['total_amount'];
+        final status =
+            _translatePaymentStatus(sale['payment_status'] as String? ?? '');
+        final seller = sale['seller'] != null
+            ? '${sale['seller']['first_name']} ${sale['seller']['last_name']}'
+            : 'غير معروف';
+        final location = sale['location']?['name']?.toString() ?? 'غير معروف';
+
+        sheet.appendRow([
+          createdAt,
+          customer,
+          product,
+          quantity,
+          price,
+          total,
+          status,
+          seller,
+          location
+        ]);
+      }
+
+      // Expenses section
+      if (dayExpenses.isNotEmpty) {
+        sheet.appendRow(['']);
+        sheet.appendRow(['المصروفات اليومية', '']);
+        sheet.appendRow(['الوصف', 'المبلغ']);
+
+        for (final exp in dayExpenses) {
+          sheet.appendRow(
+              [exp['description'] as String? ?? 'بدون وصف', exp['amount']]);
+        }
+
+        sheet.appendRow(['الإجمالي', totalExpenses]);
+      }
+
+      final fileBytes = excel.encode();
+      final downloadsDir =
+          Directory('/storage/emulated/0/Download/alrubaspreadsheet');
+      if (!await downloadsDir.exists()) {
+        await downloadsDir.create(recursive: true);
+      }
+
+      final filePath = '${downloadsDir.path}/day_$date.xlsx';
+      final file = File(filePath)..createSync(recursive: true);
+      file.writeAsBytesSync(fileBytes!);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم تصدير التقرير اليومي إلى: $filePath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ أثناء التصدير: $e')),
+        );
+      }
+      print('Daily Excel export error: $e');
     }
-
-    sheet.appendRow([]);
-    sheet.appendRow(['Revenue', month['revenue']]);
-    sheet.appendRow(['COGS', month['cogs']]);
-    sheet.appendRow(['Expenses', month['expenses']]);
-    sheet.appendRow(['Net Profit', month['net_profit']]);
   }
 
-  final downloadsDir = Directory('/storage/emulated/0/Download/alrubaspreadsheet');
-  if (!await downloadsDir.exists()) {
-    await downloadsDir.create(recursive: true);
+  Future<void> _exportMonthlyExcel(Map<String, dynamic> month) async {
+    if (!await requestStoragePermission(context)) return;
+
+    try {
+      final excel = xls.Excel.createExcel();
+      final summarySheet = excel['ملخص الشهر'];
+      final detailsSheet = excel['تفاصيل المبيعات'];
+      final expensesSheet = excel['المصروفات']; // New expenses sheet
+
+      final monthKey = month['month'] as String;
+      final monthTitle =
+          DateFormat('MMMM yyyy', 'ar').format(DateTime.parse('$monthKey-01'));
+
+      // Month summary sheet
+      summarySheet.appendRow(['التقرير الشهري', '']);
+      summarySheet.appendRow(['الشهر', monthTitle]);
+      summarySheet.appendRow(['']);
+
+      // Financial summary
+      summarySheet.appendRow(['الملخص المالي', '']);
+      summarySheet.appendRow(['الإيرادات', month['revenue']]);
+      summarySheet.appendRow(['تكلفة البضاعة المباعة', month['cogs']]);
+      summarySheet.appendRow(['المصروفات', month['expenses']]);
+      summarySheet.appendRow(['صافي الربح', month['net_profit']]);
+      summarySheet.appendRow(['']);
+
+      // Product summary
+      summarySheet.appendRow(['المنتجات المباعة', '']);
+      summarySheet.appendRow(['المنتج', 'الكمية', 'المجموع']);
+
+      final products = month['products'] as Map<String, Map<String, dynamic>>;
+      for (final entry in products.entries) {
+        summarySheet.appendRow([
+          entry.key,
+          entry.value['quantity'],
+          entry.value['total'],
+        ]);
+      }
+
+      // Daily summaries
+      summarySheet.appendRow(['']);
+      summarySheet.appendRow(['الملخص اليومي', '']);
+      summarySheet
+          .appendRow(['التاريخ', 'الإيرادات', 'التكلفة', 'الربح', 'المصروفات']);
+
+      final dailySales = _dailySales.where((d) {
+        final dt = DateTime.parse(d['date'] as String);
+        return '${dt.year}-${dt.month.toString().padLeft(2, '0')}' == monthKey;
+      }).toList();
+
+      for (final day in dailySales) {
+        final dayExpenses = _expenses
+            .where((e) => e['date'] == day['date'])
+            .fold<double>(0, (sum, exp) => sum + (exp['amount'] as double));
+
+        summarySheet.appendRow([
+          day['date'],
+          day['revenue'],
+          day['cogs'],
+          (day['revenue'] as double) - (day['cogs'] as double),
+          dayExpenses
+        ]);
+      }
+
+      // Detailed sales sheet
+      detailsSheet.appendRow(['تفاصيل جميع المبيعات للشهر', '']);
+      detailsSheet.appendRow([
+        'التاريخ',
+        'الوقت',
+        'العميل',
+        'المنتج',
+        'الكمية',
+        'السعر',
+        'المجموع',
+        'حالة الدفع',
+        'البائع',
+        'الموقع'
+      ]);
+
+      for (final day in dailySales) {
+        final rawSales = day['rawSales'] as List<dynamic>;
+        for (final sale in rawSales) {
+          final date = DateFormat('yyyy-MM-dd')
+              .format(DateTime.parse(sale['created_at']).toLocal());
+          final time = DateFormat('HH:mm')
+              .format(DateTime.parse(sale['created_at']).toLocal());
+          final customer = sale['customer']?['name']?.toString() ?? 'غير معروف';
+          final product = sale['product']?['name']?.toString() ?? 'غير معروف';
+          final quantity = sale['quantity'];
+          final price = sale['price_per_unit'];
+          final total = sale['total_amount'];
+          final status =
+              _translatePaymentStatus(sale['payment_status'] as String? ?? '');
+          final seller = sale['seller'] != null
+              ? '${sale['seller']['first_name']} ${sale['seller']['last_name']}'
+              : 'غير معروف';
+          final location = sale['location']?['name']?.toString() ?? 'غير معروف';
+
+          detailsSheet.appendRow([
+            date,
+            time,
+            customer,
+            product,
+            quantity,
+            price,
+            total,
+            status,
+            seller,
+            location
+          ]);
+        }
+      }
+
+      // Expenses sheet
+      expensesSheet.appendRow(['تفاصيل المصروفات الشهرية', '']);
+      expensesSheet.appendRow(['التاريخ', 'الوصف', 'المبلغ']);
+
+      final monthExpenses = _expenses.where((e) {
+        final dt = DateTime.parse(e['date'] as String);
+        return '${dt.year}-${dt.month.toString().padLeft(2, '0')}' == monthKey;
+      }).toList();
+
+      for (final exp in monthExpenses) {
+        expensesSheet.appendRow([
+          exp['date'],
+          exp['description'] as String? ?? 'بدون وصف',
+          exp['amount']
+        ]);
+      }
+
+      expensesSheet.appendRow(['الإجمالي', '', month['expenses']]);
+
+      final downloadsDir =
+          Directory('/storage/emulated/0/Download/alrubaspreadsheet');
+      final filePath = '${downloadsDir.path}/month_$monthKey.xlsx';
+      final fileBytes = excel.encode();
+      final file = File(filePath)..createSync(recursive: true);
+      file.writeAsBytesSync(fileBytes!);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم تصدير التقرير الشهري إلى: $filePath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ أثناء التصدير: $e')),
+        );
+      }
+      print('Monthly Excel export error: $e');
+    }
   }
 
-  final filePath = '${downloadsDir.path}/yearly_summary_${DateTime.now().year}.xlsx';
-  final fileBytes = excel.encode();
-  final file = File(filePath)..createSync(recursive: true);
-  file.writeAsBytesSync(fileBytes!);
-  print('Excel file saved at: $filePath');
+  String _translatePaymentStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'paid':
+        return 'مدفوع';
+      case 'unpaid':
+        return 'غير مدفوع';
+      case 'deposit':
+        return 'عربون';
+      default:
+        return status;
+    }
+  }
 
-  if (mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Exported yearly file to: $filePath')),
-    );
+  Future<void> _exportYearlyExcel() async {
+    if (!await requestStoragePermission(context)) return;
+
+    try {
+      final excel = xls.Excel.createExcel();
+      final expensesSheet = excel['المصروفات السنوية']; // New expenses sheet
+
+      // Add monthly summaries
+      for (final month in _monthlySummary) {
+        final sheet = excel[month['month']];
+        final monthTitle = DateFormat('MMMM yyyy', 'ar')
+            .format(DateTime.parse('${month['month']}-01'));
+
+        sheet.appendRow(['الشهر', monthTitle]);
+        sheet.appendRow([]);
+        sheet.appendRow(['المنتج', 'الكمية', 'المجموع']);
+
+        final products = month['products'] as Map<String, Map<String, dynamic>>;
+        for (final entry in products.entries) {
+          sheet.appendRow([
+            entry.key,
+            entry.value['quantity'],
+            entry.value['total'],
+          ]);
+        }
+
+        sheet.appendRow([]);
+        sheet.appendRow(['الإيرادات', month['revenue']]);
+        sheet.appendRow(['تكلفة البضاعة المباعة', month['cogs']]);
+        sheet.appendRow(['المصروفات', month['expenses']]);
+        sheet.appendRow(['صافي الربح', month['net_profit']]);
+      }
+
+      // Add yearly expenses summary
+      expensesSheet.appendRow(['المصروفات السنوية', '']);
+      expensesSheet.appendRow(['الشهر', 'المبلغ']);
+
+      double yearlyExpenses = 0.0;
+      for (final month in _monthlySummary) {
+        final monthTitle = DateFormat('MMMM yyyy', 'ar')
+            .format(DateTime.parse('${month['month']}-01'));
+
+        expensesSheet.appendRow([monthTitle, month['expenses']]);
+
+        yearlyExpenses += month['expenses'] as double;
+      }
+
+      expensesSheet.appendRow(['الإجمالي السنوي', yearlyExpenses]);
+
+      final downloadsDir =
+          Directory('/storage/emulated/0/Download/alrubaspreadsheet');
+      final filePath =
+          '${downloadsDir.path}/yearly_summary_${DateTime.now().year}.xlsx';
+      final fileBytes = excel.encode();
+      final file = File(filePath)..createSync(recursive: true);
+      file.writeAsBytesSync(fileBytes!);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم تصدير ملف السنة إلى: $filePath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ أثناء تصدير التقرير السنوي: $e')),
+        );
+      }
+      print('Yearly Excel export error: $e');
+    }
   }
 }
-
-}
-
 // ---------------------------------------------------------------------------
-// Helper mini metric chip shown under each day
+// شريحة القياسات الصغيرة المعروضة تحت كل يوم
 // ---------------------------------------------------------------------------
 class _MiniMetric extends StatelessWidget {
   final String label;
@@ -565,7 +860,8 @@ class _MiniMetric extends StatelessWidget {
     final txt = isProfit
         ? (value >= 0 ? Colors.green.shade700 : Colors.red.shade700)
         : cs.onSurfaceVariant;
-    final nf = NumberFormat.currency(symbol: 'LBP ', decimalDigits: 0);
+    final nf = NumberFormat.currency(
+        locale: 'ar_LB', symbol: 'ل.ل ', decimalDigits: 0);
     return Container(
       margin: const EdgeInsets.only(right: 8, top: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -588,6 +884,10 @@ class _MiniMetric extends StatelessWidget {
 }
 
 Future<bool> requestStoragePermission(BuildContext context) async {
+   if (!Platform.isAndroid) {
+    // No permission needed for desktop
+    return true;
+  }
   final androidInfo = await DeviceInfoPlugin().androidInfo;
   final sdkInt = androidInfo.version.sdkInt;
 
@@ -613,16 +913,16 @@ Future<bool> requestStoragePermission(BuildContext context) async {
     if (isPermanentlyDenied) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Permission permanently denied. Open settings to allow.'),
+          content: const Text('تم رفض الإذن بشكل دائم. افتح الإعدادات للسماح.'),
           action: SnackBarAction(
-            label: 'Settings',
+            label: 'الإعدادات',
             onPressed: () => openAppSettings(),
           ),
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Storage permission is required to export files.')),
+        const SnackBar(content: Text('يجب منح إذن التخزين لتصدير الملفات.')),
       );
     }
 
@@ -631,4 +931,3 @@ Future<bool> requestStoragePermission(BuildContext context) async {
 
   return true;
 }
-
