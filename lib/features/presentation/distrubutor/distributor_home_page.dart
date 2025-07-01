@@ -1,5 +1,7 @@
 import 'package:alruba_waterapp/features/presentation/logout_button.dart';
+import 'package:alruba_waterapp/features/presentation/manager/Gallon_transaction_status_page.dart';
 import 'package:alruba_waterapp/features/presentation/manager/customer_details_page.dart';
+import 'package:alruba_waterapp/features/presentation/owner/owner_unpaid_sale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -39,10 +41,25 @@ class _DistributorHomePageState extends ConsumerState<DistributorHomePage> {
         ),
         actions: [
           const LogoutButton(fullWidth: false),
-          const SizedBox(width:80),
+          const SizedBox(width:100),
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: () => ref.invalidate(distributorSalesProvider),
+            icon: const Icon(Icons.money_off, color: Colors.white),
+            tooltip: 'Unpaid customers',
+            onPressed: () {
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const OwnerUnpaidSalesPage(),
+              ));
+            },
+          ),
+          const SizedBox(width:40),
+          IconButton(
+            icon: const Icon(Icons.local_drink_outlined, color: Colors.white),
+            tooltip: 'Gallons transaction',
+            onPressed: () {
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const GallonTransactionStatusPage(),
+              ));
+            },
           ),
         ],
       ),

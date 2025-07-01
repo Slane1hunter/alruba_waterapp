@@ -15,6 +15,7 @@ class _DayEvent {
   _DayEvent(this.sale, this.time, this.isPayment);
 }
 
+
 class DistributorSalesPage extends ConsumerStatefulWidget {
   const DistributorSalesPage({super.key});
 
@@ -51,8 +52,9 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
               error: (err, _) => Center(child: Text('خطأ: $err')),
               data: (allSales) {
                 final filtered = _applyFilters(allSales);
-                if (filtered.isEmpty)
+                if (filtered.isEmpty) {
                   return const Center(child: Text('لا توجد سجلات مطابقة.'));
+                }
                 return _buildEventsList(filtered);
               },
             ),
@@ -154,10 +156,13 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
   List<DistributorSale> _applyFilters(List<DistributorSale> all) {
     return all.where((s) {
       if (_searchText.isNotEmpty &&
-          !s.customerName.toLowerCase().contains(_searchText)) return false;
-      if (_locationFilter != null &&
-          !s.location.toLowerCase().contains(_locationFilter!.toLowerCase()))
+          !s.customerName.toLowerCase().contains(_searchText)) {
         return false;
+      }
+      if (_locationFilter != null &&
+          !s.location.toLowerCase().contains(_locationFilter!.toLowerCase())) {
+        return false;
+      }
       if (_startDate != null && _endDate != null) {
         final d = s.date.toLocal();
         if (d.isBefore(_startDate!) || d.isAfter(_endDate!)) return false;
@@ -171,23 +176,16 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
     for (final s in sales) {
       final saleDate = s.date.toLocal();
       final saleKey = DateFormat('yyyy-MM-dd').format(saleDate);
+      eventsByDay.putIfAbsent(saleKey, () => []).add(
+            _DayEvent(s, s.date, false),
+          );
 
-      // Always add the sale event
-      eventsByDay
-          .putIfAbsent(saleKey, () => [])
-          .add(_DayEvent(s, s.date, false));
-
-      // Only add payment if it exists and is on a different day
-      if (s.paymentDate != null) {
-        final paymentDate = s.paymentDate!.toLocal();
-
-        // Check if payment is on a different day
-        if (!_isSameDay(saleDate, paymentDate)) {
-          final payKey = DateFormat('yyyy-MM-dd').format(paymentDate);
-          eventsByDay
-              .putIfAbsent(payKey, () => [])
-              .add(_DayEvent(s, s.paymentDate!, true));
-        }
+      if (s.paymentDate != null && !_isSameDay(s.date, s.paymentDate!)) {
+        final payKey =
+            DateFormat('yyyy-MM-dd').format(s.paymentDate!.toLocal());
+        eventsByDay.putIfAbsent(payKey, () => []).add(
+              _DayEvent(s, s.paymentDate!, true),
+            );
       }
     }
 
@@ -218,23 +216,24 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
                     const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               children: events.map((e) {
+                
                 if (e.isPayment) {
                   // payment tile shows original sale date
                   return ListTile(
                     leading:
                         const Icon(Icons.attach_money, color: Colors.green),
                     title: Text(
-                      'دفع مقابل البيع بتاريخ ${DateFormat('MMM dd', 'ar').format(e.sale.date.toLocal())}',
+                      'دفع مقابل البيع بتاريخ ${DateFormat('MMM dd', 'ar').format(e.sale!.date.toLocal())}',
                     ),
                     subtitle: Text(
-                      '${e.sale.customerName} — ${_lbpFormat.format(e.sale.totalAmount)}',
+                      '${e.sale?.customerName} — ${_lbpFormat.format(e.sale?.totalAmount)}',
                     ),
                     trailing:
                         Text(DateFormat('HH:mm').format(e.time.toLocal())),
                   );
                 } else {
                   // sale tile
-                  final status = e.sale.paymentStatus;
+                  final status = e.sale?.paymentStatus;
                   IconData icon;
                   Color color;
                   if (status == 'paid') {
@@ -251,12 +250,12 @@ class _DistributorSalesPageState extends ConsumerState<DistributorSalesPage> {
                     leading: CircleAvatar(
                         backgroundColor: color,
                         child: Icon(icon, color: Colors.white)),
-                    title: Text(e.sale.customerName,
+                    title: Text(e.sale!.customerName,
                         style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle:
-                        Text('${e.sale.productName} • الكمية: ${e.sale.quantity}'),
-                    trailing: Text(_lbpFormat.format(e.sale.totalAmount)),
-                    onTap: () => _showSaleDetailsDialog(e.sale),
+                    subtitle: Text(
+                        '${e.sale?.productName} • الكمية: ${e.sale?.quantity}'),
+                    trailing: Text(_lbpFormat.format(e.sale?.totalAmount)),
+                    onTap: () => _showSaleDetailsDialog(e.sale!),
                   );
                 }
               }).toList(),

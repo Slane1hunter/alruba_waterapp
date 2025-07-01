@@ -20,6 +20,8 @@ class OfflineSale extends HiveObject {
   @HiveField(12) String  soldBy;                  // Supabase user-id
   @HiveField(13) String  locationId;              // UUID from locations table
   @HiveField(15) String? localSaleId;                      // offline-generated UUID
+  @HiveField(16) final String? saleType;
+  @HiveField(17) double amountPaid;
 
   OfflineSale({
     required this.isNewCustomer,
@@ -37,6 +39,8 @@ class OfflineSale extends HiveObject {
     required this.soldBy,
     required this.locationId,
     required this.localSaleId,
+    required this.saleType,
+    this.amountPaid = 0.0,
   });
 
   /* ───────────────────────────────────────────────────────────────── */
@@ -61,6 +65,8 @@ class OfflineSale extends HiveObject {
         'customer_phone'       : customerPhone,
         'sold_by'              : soldBy,
         'location_id'          : locationId,
+        'saleType'             : saleType,
+        'amount_paid'           : amountPaid
       };
 
   @override
@@ -79,5 +85,6 @@ OfflineSale(
   createdAt:        $createdAt
   soldBy:           $soldBy
   locationId:       $locationId
+  saleType:         $saleType
 )''';
 }

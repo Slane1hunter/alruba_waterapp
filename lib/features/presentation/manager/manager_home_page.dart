@@ -1,7 +1,7 @@
-
 // lib/features/presentation/manager/manager_home_page.dart
 
 import 'package:alruba_waterapp/features/presentation/logout_button.dart';
+import 'package:alruba_waterapp/features/presentation/owner/owner_unpaid_sale.dart';
 import 'package:alruba_waterapp/providers/manager_slaes_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,16 +49,32 @@ class _ManagerHomePageState extends ConsumerState<ManagerHomePage> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manager Home', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 20)),
         centerTitle: true,
-        flexibleSpace: Container(decoration: const BoxDecoration(gradient: _primaryGradient)),
+        flexibleSpace: Container(
+            decoration: const BoxDecoration(gradient: _primaryGradient)),
         elevation: 2,
-         actions: const [LogoutButton(fullWidth: false)],
+        actions: [
+          const LogoutButton(fullWidth: false),
+          const SizedBox(width: 30),
+          const Text('Manager Home',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 20)),
+          const SizedBox(width: 30),
+          IconButton(
+            icon: const Icon(Icons.money_off, color: Colors.white),
+            tooltip: 'Unpaid customers',
+            onPressed: () {
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const OwnerUnpaidSalesPage(),
+              ));
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
-          transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+          transitionBuilder: (child, anim) =>
+              FadeTransition(opacity: anim, child: child),
           child: KeyedSubtree(
             key: ValueKey<int>(_currentIndex),
             child: _pages[_currentIndex],
@@ -73,7 +89,7 @@ class _ManagerHomePageState extends ConsumerState<ManagerHomePage> {
           );
           if (created == true) ref.invalidate(managerSalesProvider);
         },
-        backgroundColor:const Color(0xFF00695C),
+        backgroundColor: const Color(0xFF00695C),
         elevation: 6,
         tooltip: 'Add New Sale',
         child: const Icon(Icons.add, size: 28),
@@ -95,7 +111,9 @@ class _ManagerHomePageState extends ConsumerState<ManagerHomePage> {
             icon: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: isSelected ? theme.colorScheme.primary.withOpacity(0.1) : Colors.transparent,
+                color: isSelected
+                    ? theme.colorScheme.primary.withOpacity(0.1)
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(item.icon, size: 24),
@@ -113,4 +131,3 @@ class _NavItem {
   final String label;
   const _NavItem({required this.icon, required this.label});
 }
-

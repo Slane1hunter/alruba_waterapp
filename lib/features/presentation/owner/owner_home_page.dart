@@ -3,6 +3,7 @@
 import 'package:alruba_waterapp/features/presentation/distrubutor/sale_form.dart';
 import 'package:alruba_waterapp/features/presentation/distrubutor/sales/widgets/sales_queue_page.dart';
 import 'package:alruba_waterapp/features/presentation/owner/admin_profiles_page.dart';
+import 'package:alruba_waterapp/features/presentation/owner/owner_unpaid_sale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -53,6 +54,8 @@ class _OwnerHomePageState extends ConsumerState<OwnerHomePage> {
     _DrawerEntry(icon: Icons.add_circle_outline_sharp, label: 'إجراء مبيعات', page: MakeSalePage()),
     _DrawerEntry(icon: Icons.query_builder, label: 'قائمة الانتظار للمبيعات', page: SalesQueuePage()),
     _DrawerEntry(icon: Icons.person, label: 'الملفات الشخصية', page: AdminProfilesPage()),
+    _DrawerEntry(icon: Icons.money_off, label: 'طلبات غير مدفوعة', page: OwnerUnpaidSalesPage()),
+
     //_DrawerEntry(icon: Icons.dashboard, label: 'لوحة تحكم العمال', page: OwnerDashboardPage2()),
   ];
 

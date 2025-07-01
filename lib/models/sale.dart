@@ -43,6 +43,9 @@ class Sale extends HiveObject {
   @HiveField(12)
   DateTime createdAt;
 
+  @HiveField(13)
+double amountPaid;
+
   // Constructor
   Sale({
     this.localId,
@@ -58,5 +61,6 @@ class Sale extends HiveObject {
     required this.soldBy,
     this.locationId,
     required this.createdAt,
+    this.amountPaid = 0.0,
   });
 }

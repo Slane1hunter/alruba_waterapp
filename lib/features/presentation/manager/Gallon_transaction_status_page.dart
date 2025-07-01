@@ -1,275 +1,293 @@
+// GallonTransactionStatusPage: Full, working logic with no reliance on Supabase foreign key relationships
+
+import 'package:alruba_waterapp/services/gallon_payment-service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:collection/collection.dart';
-
 import '../../../services/supabase_service.dart';
 
-final _lbp = NumberFormat.currency(
-  locale: 'ar_LB',
-  symbol: 'ل.ل ',
-  decimalDigits: 0,
-);
+final _lbp =
+    NumberFormat.currency(locale: 'ar_LB', symbol: 'ل.ل ', decimalDigits: 0);
 
 class GallonTransactionStatusPage extends ConsumerStatefulWidget {
   const GallonTransactionStatusPage({super.key});
 
   @override
-  ConsumerState<GallonTransactionStatusPage> createState() => _GallonTransactionStatusPageState();
+  ConsumerState<GallonTransactionStatusPage> createState() =>
+      _GallonTransactionStatusPageState();
 }
 
-class _GallonTransactionStatusPageState extends ConsumerState<GallonTransactionStatusPage> {
+class _GallonTransactionStatusPageState
+    extends ConsumerState<GallonTransactionStatusPage> {
   final _searchCtrl = TextEditingController();
-  final _scrollCtrl = ScrollController();
-
   bool _loading = true;
   String _search = '';
-  List<Map<String, dynamic>> _all = [];
+  List<Map<String, dynamic>> _transactions = [];
+  Map<String, Map<String, dynamic>> _customers = {};
+  Map<String, Map<String, dynamic>> _products = {};
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _fetch());
-    _searchCtrl.addListener(() {
-      setState(() => _search = _searchCtrl.text.toLowerCase());
-    });
+    _searchCtrl.addListener(
+        () => setState(() => _search = _searchCtrl.text.toLowerCase()));
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
-    _scrollCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _fetch() async {
-    setState(() => _loading = true);
-    try {
-      final rows = await SupabaseService.client.from('gallon_transactions').select('''
-        id,
-        sale_id,
-        customer_id,
-        quantity,
-        amount,
-        status,
-        transaction_type,
-        created_at,
-        customer:customers(id,name)
-      ''').order('created_at', ascending: false);
+  setState(() => _loading = true);
+  try {
+    final txs = await SupabaseService.client
+        .from('gallon_transactions')
+        .select('*')
+        .order('created_at', ascending: false);
 
-      _all = List<Map<String, dynamic>>.from(rows)
-          .map((m) => {
-                ...m,
-                'quantity': (m['quantity'] as num?)?.toInt() ?? 0,
-                'amount': (m['amount'] as num?)?.toDouble() ?? 0.0,
-                'status': (m['status']?.toString().toLowerCase() ?? 'unpaid'),
-                'created_at': m['created_at'] ?? DateTime.now().toIso8601String(),
-                'customer': m['customer'] ?? {'id': '?', 'name': 'مجهول'},
-              })
-          .where((m) => m['status'] == 'unpaid' || m['transaction_type'] == 'deposit')
-          .toList();
-    } catch (e) {
-      _snack('خطأ في التحميل: $e', Colors.red);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    final customerIds = txs.map((t) => t['customer_id'] as String).toSet().toList();
+    final productIds = txs.map((t) => t['product_id'] as String).toSet().toList();
+    final saleIds = txs.map((t) => t['sale_id'] as String).toSet().toList();
+
+    final customerList = await SupabaseService.client
+        .from('customers')
+        .select('id, name')
+        .inFilter('id', customerIds);
+
+    final productList = await SupabaseService.client
+        .from('products')
+        .select('id, name')
+        .inFilter('id', productIds);
+
+    // Fetch sales to get location_id per sale_id
+    final salesList = await SupabaseService.client
+        .from('sales')
+        .select('id, location_id')
+        .inFilter('id', saleIds);
+
+    final salesMap = {for (var s in salesList) s['id']: s['location_id']};
+
+    _customers = {for (var c in customerList) c['id']: c};
+    _products = {for (var p in productList) p['id']: p};
+
+    _transactions = txs
+        .map((tx) => {
+              ...tx,
+              'customer': _customers[tx['customer_id']],
+              'product': _products[tx['product_id']],
+              'location_id': salesMap[tx['sale_id']],  // attach location_id here
+            })
+        .toList();
+  } catch (e) {
+    _snack('خطأ أثناء التحميل: $e', Colors.red);
+  } finally {
+    setState(() => _loading = false);
   }
+}
 
-  Map<String, List<Map<String, dynamic>>> get _byCustomer =>
-      groupBy(_all.where((tx) {
-        final name = (tx['customer']['name'] as String).toLowerCase();
-        return name.contains(_search);
-      }), (m) => m['customer']['id'] as String);
+
+  Map<String, List<Map<String, dynamic>>> get _grouped => groupBy(
+        _transactions.where(
+            (t) => t['transaction_type'] == 'deposit' && !t['is_settled']),
+        (t) => t['customer_id'] as String,
+      );
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('الحركات المالية - جالون'),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _fetch,
-              child: CustomScrollView(
-                controller: _scrollCtrl,
-                slivers: [
-                  SliverToBoxAdapter(child: _searchField()),
-                  if (_byCustomer.isEmpty)
-                    const SliverFillRemaining(
-                      child: Center(child: Text('لا توجد نتائج')),
-                    )
-                  else
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (ctx, i) {
-                          final e = _byCustomer.entries.elementAt(i);
-                          return _CustomerTile(e, _markPaid);
-                        },
-                        childCount: _byCustomer.length,
+      appBar: AppBar(title: const Text('إدارة جالونات الإيداع')),
+      body: RefreshIndicator(
+        onRefresh: _fetch,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.only(top: 16),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextField(
+                      controller: _searchCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'ابحث باسم الزبون',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_grouped.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Center(
+                        child: Text('لا توجد نتائج'),
+                      ),
+                    )
+                  else
+                    ..._grouped.entries.map((entry) {
+                      final customerId = entry.key;
+                      final customer = _customers[customerId];
+                      final txs = entry.value;
+                      final totalQty = txs.fold<int>(
+                          0, (sum, tx) => sum + (tx['quantity'] as int));
+                      return Card(
+                        margin: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        child: ExpansionTile(
+                          title: Text(customer?['name'] ?? 'مجهول'),
+                          subtitle: Text('الرصيد: $totalQty جالون'),
+                          children: [
+                            for (final tx in txs) _txTile(tx),
+                          ],
+                        ),
+                      );
+                    }),
                 ],
               ),
-            ),
+      ),
     );
   }
 
-  Widget _searchField() => Padding(
-        padding: const EdgeInsets.all(16),
-        child: TextField(
-          controller: _searchCtrl,
-          decoration: InputDecoration(
-            labelText: 'ابحث باسم الزبون',
-            prefixIcon: const Icon(Icons.search),
-            filled: true,
-            fillColor: Colors.grey.shade100,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-      );
-
-  Future<void> _markPaid(Map<String, dynamic> tx) async {
-    if (tx['status'] == 'paid') {
-      _snack('تم الدفع مسبقاً', Colors.orange);
-      return;
-    }
-    if (tx['sale_id'] == null) {
-      _snack('لا يوجد sale_id', Colors.red);
-      return;
-    }
-    try {
-      final updates = {
-        'status': 'paid',
-        if (tx['transaction_type'] == 'deposit') 'transaction_type': 'purchase'
-      };
-
-      await SupabaseService.client
-          .from('gallon_transactions')
-          .update(updates)
-          .eq('id', tx['id']);
-
-      setState(() {
-        tx['status'] = 'paid';
-        if (tx['transaction_type'] == 'deposit') {
-          tx['transaction_type'] = 'purchase';
-        }
-      });
-
-      _snack('تم تأكيد الدفع', Colors.green);
-    } catch (e) {
-      _snack('خطأ: $e', Colors.red);
-    }
-  }
-
-  void _snack(String m, Color c) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m), backgroundColor: c));
-}
-
-class _CustomerTile extends StatelessWidget {
-  const _CustomerTile(this.entry, this.onPay);
-
-  final MapEntry<String, List<Map<String, dynamic>>> entry;
-  final void Function(Map<String, dynamic>) onPay;
-
-  @override
-  Widget build(BuildContext context) {
-    final name = entry.value.first['customer']['name'] ?? 'مجهول';
-    final qty = entry.value.fold<int>(0, (s, m) => s + (m['quantity'] as int));
-    final amt = entry.value.fold<double>(0, (s, m) => s + (m['amount'] as double));
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-        leading: const Icon(Icons.person_outline),
-        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Wrap(
-          spacing: 8,
-          children: [
-            _chip(Icons.water_drop, '$qty جالون'),
-            _chip(Icons.attach_money, _lbp.format(amt)),
-          ],
-        ),
+  Widget _txTile(Map<String, dynamic> tx) {
+    final dt = DateTime.tryParse(tx['created_at'])?.toLocal();
+    final qty = tx['quantity'] as int;
+    final product = tx['product']?['name'] ?? 'غير معروف';
+    return ListTile(
+      title: Text('منتج: $product - $qty جالون'),
+      subtitle: Text(
+          'تم في: ${dt != null ? DateFormat('yyyy-MM-dd – HH:mm').format(dt) : '?'}'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          for (final tx in entry.value) _TxTile(tx, () => onPay(tx)),
-          const SizedBox(height: 8),
+          IconButton(
+            icon: const Icon(Icons.money, color: Colors.green),
+            onPressed: () => _confirmAction(tx, 'pay'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.reply, color: Colors.orange),
+            onPressed: () => _confirmAction(tx, 'return'),
+          ),
         ],
       ),
     );
   }
 
-  Chip _chip(IconData ic, String t) => Chip(
-        avatar: Icon(ic, size: 16),
-        label: Text(t, overflow: TextOverflow.ellipsis),
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-      );
-}
-
-class _TxTile extends StatelessWidget {
-  const _TxTile(this.tx, this.onPay);
-  final Map<String, dynamic> tx;
-  final VoidCallback onPay;
-
-  @override
-  Widget build(BuildContext context) {
-    final status = (tx['status'] as String).toLowerCase();
-    final paid = status == 'paid';
-    final dep = tx['transaction_type'] == 'deposit';
-    final dt = DateTime.tryParse(tx['created_at'])?.toLocal() ?? DateTime.now();
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: ListTile(
-        leading: Icon(
-          paid
-              ? Icons.check_circle
-              : dep
-                  ? Icons.account_balance_wallet
-                  : Icons.pending_actions,
-          color: paid
-              ? Colors.green
-              : dep
-                  ? Colors.purple
-                  : Colors.orange,
-        ),
-        title: Text(_cap(tx['transaction_type'])),
-        subtitle: Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: [
-            _pill('الكمية: ${tx['quantity']}'),
-            _pill('المبلغ: ${_lbp.format(tx['amount'])}'),
-            _pill(DateFormat('MMM d • HH:mm', 'ar').format(dt)),
-          ],
-        ),
-        trailing: !paid
-            ? IconButton(
-                icon: const Icon(Icons.payment, color: Colors.blue),
-                onPressed: onPay,
-              )
-            : null,
-      ),
+  Future<void> _confirmAction(Map<String, dynamic> tx, String action) async {
+    final qty = await showDialog<int>(
+      context: context,
+      builder: (ctx) =>
+          _QuantityDialog(maxQuantity: tx['quantity'], action: action),
     );
+
+    if (qty == null) return;
+
+    if (qty <= 0 || qty > tx['quantity']) {
+      _snack('كمية غير صالحة', Colors.red);
+      return;
+    }
+
+    try {
+      final remaining = tx['quantity'] - qty;
+
+      if (action == 'pay') {
+        final pricePerUnit =
+            (tx['amount'] as num?) != null && (tx['quantity'] as int) > 0
+                ? (tx['amount'] as num) / tx['quantity']
+                : 0;
+        final locationId = tx['location_id'];
+        if (locationId == null) {
+          _snack('خطأ: مكان البيع غير معروف (location_id فارغ)', Colors.red);
+          return;
+        }
+
+        await payForDeposit(
+          context: context,
+          customerId: tx['customer_id'],
+          productId: tx['product_id'],
+          quantity: qty,
+          pricePerUnit: pricePerUnit.toDouble(),
+          linkedDepositSaleId: tx['sale_id'],
+          locationId: (tx['location_id'] ??
+              'eab70b1a-310d-4115-80ac-bf93c09f3cdd') as String,
+        );
+      } else {
+        await SupabaseService.client.from('gallon_transactions').insert({
+          'customer_id': tx['customer_id'],
+          'product_id': tx['product_id'],
+          'quantity': qty,
+          'transaction_type': 'return',
+          'status': 'paid',
+          'amount': 0,
+          'sale_id': tx['sale_id'],
+          'created_at': DateTime.now().toIso8601String(),
+          'is_settled': false,
+        });
+      }
+
+      if (remaining > 0) {
+        await SupabaseService.client
+            .from('gallon_transactions')
+            .update({'quantity': remaining}).eq('id', tx['id']);
+      } else {
+        await SupabaseService.client
+            .from('gallon_transactions')
+            .update({'is_settled': true}).eq('id', tx['id']);
+      }
+
+      _snack('تم تنفيذ العملية بنجاح', Colors.green);
+      _fetch();
+    } catch (e) {
+      _snack('فشل في تنفيذ العملية: $e', Colors.red);
+    }
   }
 
-  String _cap(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+  void _snack(String m, Color c) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(m), backgroundColor: c));
+  }
+}
 
-  Widget _pill(String t) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(t, style: const TextStyle(fontSize: 12)),
-      );
+class _QuantityDialog extends StatefulWidget {
+  final int maxQuantity;
+  final String action;
+  const _QuantityDialog({required this.maxQuantity, required this.action});
+
+  @override
+  State<_QuantityDialog> createState() => _QuantityDialogState();
+}
+
+class _QuantityDialogState extends State<_QuantityDialog> {
+  int qty = 1;
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.action == 'pay' ? 'دفع جالونات' : 'إرجاع جالونات'),
+      content: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+              icon: const Icon(Icons.remove),
+              onPressed: () => setState(() => qty = (qty > 1) ? qty - 1 : qty)),
+          Text('$qty', style: const TextStyle(fontSize: 20)),
+          IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: () => setState(
+                  () => qty = (qty < widget.maxQuantity) ? qty + 1 : qty)),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء')),
+        ElevatedButton(
+            onPressed: () => Navigator.pop(context, qty),
+            child: const Text('تأكيد')),
+      ],
+    );
+  }
 }

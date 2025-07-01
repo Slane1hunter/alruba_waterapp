@@ -102,7 +102,9 @@ class OfflineSyncService {
               'payment_status': sale.paymentStatus.toLowerCase(),
               'sold_by': sale.soldBy,
               'location_id': sale.locationId,
-              'created_at': sale.createdAt.toIso8601String(),
+              'created_at': sale.createdAt.toUtc().toIso8601String(),
+              'sale_type': sale.saleType ?? 'normal',
+               'amount_paid': sale.amountPaid,
             })
             .select('id')
             .single();
@@ -136,11 +138,31 @@ class OfflineSyncService {
           }
 
           // 4. Delete only after processing transactions
-          await box.delete(key);
+          //await box.delete(key);
           debugPrint('[OfflineSync] sale synced → $remoteSaleId');
         }
       } catch (e) {
         debugPrint('[OfflineSync] sale-sync error: $e');
+      }
+    }
+  }
+
+  Future<void> _maybeDeleteSaleAfterTxSync(
+      Box<OfflineSale> salesBox, String saleLocalId) async {
+    final txBox =
+        await Hive.openBox<OfflineGallonTransaction>(_offlineGallonTxBox);
+
+    final stillPending =
+        txBox.values.any((tx) => tx.saleLocalId == saleLocalId);
+    if (!stillPending) {
+      final saleKey = salesBox.keys.firstWhere(
+        (k) => salesBox.get(k)?.localSaleId == saleLocalId,
+        orElse: () => null,
+      );
+      if (saleKey != null) {
+        await salesBox.delete(saleKey);
+        debugPrint(
+            '[OfflineSync] Cleaned sale after all related gallon-tx synced.');
       }
     }
   }
@@ -217,6 +239,9 @@ class OfflineSyncService {
           await box.delete(key);
           debugPrint('[OfflineSync] gallon-tx synced → ${resp['id']}');
         }
+        // After syncing gallon transaction, check if we can now delete its related sale
+        final salesBox = await Hive.openBox<OfflineSale>(_offlineSalesBox);
+        await _maybeDeleteSaleAfterTxSync(salesBox, tx.saleLocalId);
       } catch (e) {
         debugPrint('[OfflineSync] gallon-tx error: $e');
         // Handle foreign key errors specifically
